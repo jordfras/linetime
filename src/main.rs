@@ -44,7 +44,11 @@ impl std::fmt::Display for Token {
         match self {
             Token::Char(c) => write!(f, "{c}"),
             Token::CarriageReturn => write!(f, "\u{240d}"),
-            Token::LineFeed => writeln!(f, "\u{240a}"),
+            Token::LineFeed => {
+                // Write \r to ensure starting on new line when handling output from Docker Windows
+                // container in Linux
+                write!(f, "\u{240a}\r\n")
+            }
             Token::EscapeMoveSequence(_) => write!(f, "<MOVE>"),
             Token::EscapeEraseSequence(_) => write!(f, "<ERASE>"),
             Token::EndOfFile => write!(f, "\u{2404}"),
