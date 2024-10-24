@@ -2,7 +2,7 @@ use std::io::Read;
 use std::time::{Duration, SystemTime};
 
 #[derive(PartialEq)]
-enum CursorMove {
+enum EscapeCursorMove {
     Home,
     ToLineAndColumn((u32, u32)),
     LinesUp(u32),
@@ -15,13 +15,26 @@ enum CursorMove {
 }
 
 #[derive(PartialEq)]
+enum EscapeErase {
+    FromCursorToEndOfScreen,
+    FromCursorToBeginningOfScreen,
+    EntireScreen,
+    SavedLine,
+    FromCursorToEndOfLine,
+    StartOfLineToCursor,
+    EntireLine,
+}
+
+#[derive(PartialEq)]
 enum Token {
     // A single character
     Char(char),
     CarriageReturn,
     LineFeed,
-    // An escape sequence (starting with ESC[ ) to control terminal behavior
-    EscapeMoveSequence(CursorMove),
+    // An ANSI escape sequence (starting with ESC) to move cursor
+    EscapeMoveSequence(EscapeCursorMove),
+    // An ANSI escape sequence (starting with ESC) to erase
+    EscapeEraseSequence(EscapeErase),
     // End of file, i.e., end of input stream
     EndOfFile,
 }
@@ -33,6 +46,7 @@ impl std::fmt::Display for Token {
             Token::CarriageReturn => write!(f, "\u{240d}"),
             Token::LineFeed => writeln!(f, "\u{240a}"),
             Token::EscapeMoveSequence(_) => write!(f, "<MOVE>"),
+            Token::EscapeEraseSequence(_) => write!(f, "<ERASE>"),
             Token::EndOfFile => write!(f, "\u{2404}"),
         }
     }
