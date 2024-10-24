@@ -30,10 +30,10 @@ impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Char(c) => write!(f, "{c}"),
-            Token::CarriageReturn => write!(f, "<CR>"),
-            Token::LineFeed => write!(f, "<LF>\n"),
+            Token::CarriageReturn => write!(f, "\u{240d}"),
+            Token::LineFeed => writeln!(f, "\u{240a}"),
             Token::EscapeMoveSequence(_) => write!(f, "<MOVE>"),
-            Token::EndOfFile => write!(f, "EOF"),
+            Token::EndOfFile => write!(f, "\u{2404}"),
         }
     }
 }
