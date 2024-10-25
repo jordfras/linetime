@@ -1,30 +1,7 @@
-use std::io::Read;
 use crate::read_char::read_char;
+use std::io::Read;
 
-
-#[derive(PartialEq)]
-pub enum EscapeCursorMove {
-    Home,
-    ToLineAndColumn((u32, u32)),
-    LinesUp(u32),
-    LinesDown(u32),
-    ColumnsRight(u32),
-    ColumnsLeft(u32),
-    UpOne,
-    SavePosition,
-    RestorePosition,
-}
-
-#[derive(PartialEq)]
-pub enum EscapeErase {
-    FromCursorToEndOfScreen,
-    FromCursorToBeginningOfScreen,
-    EntireScreen,
-    SavedLine,
-    FromCursorToEndOfLine,
-    StartOfLineToCursor,
-    EntireLine,
-}
+mod escape;
 
 #[derive(PartialEq)]
 pub enum Token {
@@ -32,10 +9,8 @@ pub enum Token {
     Char(char),
     CarriageReturn,
     LineFeed,
-    // An ANSI escape sequence (starting with ESC) to move cursor
-    EscapeMoveSequence(EscapeCursorMove),
-    // An ANSI escape sequence (starting with ESC) to erase
-    EscapeEraseSequence(EscapeErase),
+    // An ANSI escape sequence (starting with ESC)
+    EscapeSequence(escape::Sequence),
     // End of file, i.e., end of input stream
     EndOfFile,
 }
@@ -50,27 +25,25 @@ impl std::fmt::Display for Token {
                 // container in Linux
                 write!(f, "\u{240a}\r\n")
             }
-            Token::EscapeMoveSequence(_) => write!(f, "<MOVE>"),
-            Token::EscapeEraseSequence(_) => write!(f, "<ERASE>"),
+            Token::EscapeSequence(_) => write!(f, "<ESC>"),
             Token::EndOfFile => write!(f, "\u{2404}"),
         }
     }
 }
 
-
-pub struct SerialTokenizer<'a, R: Read>
-{
+pub struct SerialTokenizer<'a, R: Read> {
     stream: &'a mut R,
     /// A buffer for handling
     _escape_buf: String,
 }
 
-impl<'a, R: Read> SerialTokenizer<'a, R>
-{
+impl<'a, R: Read> SerialTokenizer<'a, R> {
     pub fn new(stream: &'a mut R) -> Self {
-        Self { stream, _escape_buf: String::new() }
+        Self {
+            stream,
+            _escape_buf: String::new(),
+        }
     }
-
 
     pub fn next(&mut self) -> Result<Token, std::io::Error> {
         if let Some(c) = read_char(self.stream)? {
