@@ -1,76 +1,9 @@
-use std::io::Read;
 use std::time::{Duration, SystemTime};
 
 mod read_char;
-use crate::read_char::read_char;
+mod token;
 
-#[derive(PartialEq)]
-enum EscapeCursorMove {
-    Home,
-    ToLineAndColumn((u32, u32)),
-    LinesUp(u32),
-    LinesDown(u32),
-    ColumnsRight(u32),
-    ColumnsLeft(u32),
-    UpOne,
-    SavePosition,
-    RestorePosition,
-}
-
-#[derive(PartialEq)]
-enum EscapeErase {
-    FromCursorToEndOfScreen,
-    FromCursorToBeginningOfScreen,
-    EntireScreen,
-    SavedLine,
-    FromCursorToEndOfLine,
-    StartOfLineToCursor,
-    EntireLine,
-}
-
-#[derive(PartialEq)]
-enum Token {
-    // A single character
-    Char(char),
-    CarriageReturn,
-    LineFeed,
-    // An ANSI escape sequence (starting with ESC) to move cursor
-    EscapeMoveSequence(EscapeCursorMove),
-    // An ANSI escape sequence (starting with ESC) to erase
-    EscapeEraseSequence(EscapeErase),
-    // End of file, i.e., end of input stream
-    EndOfFile,
-}
-
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Token::Char(c) => write!(f, "{c}"),
-            Token::CarriageReturn => write!(f, "\u{240d}"),
-            Token::LineFeed => {
-                // Write \r to ensure starting on new line when handling output from Docker Windows
-                // container in Linux
-                write!(f, "\u{240a}\r\n")
-            }
-            Token::EscapeMoveSequence(_) => write!(f, "<MOVE>"),
-            Token::EscapeEraseSequence(_) => write!(f, "<ERASE>"),
-            Token::EndOfFile => write!(f, "\u{2404}"),
-        }
-    }
-}
-
-fn read_token(stream: &mut impl Read) -> Result<Token, std::io::Error> {
-    if let Some(c) = read_char(stream)? {
-        Ok(match c {
-            '\r' => Token::CarriageReturn,
-            '\n' => Token::LineFeed,
-            // TODO: Escape sequencees
-            _ => Token::Char(c),
-        })
-    } else {
-        Ok(Token::EndOfFile)
-    }
-}
+use crate::token::{SerialTokenizer, Token};
 
 fn format(duration: Duration) -> String {
     format!(
@@ -86,8 +19,9 @@ fn main() {
     let mut stdin = std::io::stdin().lock();
 
     let mut start_of_line = true;
+    let mut tokenizer = SerialTokenizer::new(&mut stdin);
     loop {
-        match read_token(&mut stdin) {
+        match tokenizer.next() {
             Ok(Token::EndOfFile) => {
                 println!("{}", Token::EndOfFile);
                 break;
