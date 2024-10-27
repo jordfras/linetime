@@ -3,7 +3,7 @@ use std::io::Read;
 
 mod escape;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     // A single character
     Char(char),
@@ -56,5 +56,66 @@ impl<'a, R: Read> SerialTokenizer<'a, R> {
         } else {
             Ok(Token::EndOfFile)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Creates a string slice just containing an ANSI escape sequence
+    macro_rules! stream {
+        ($str:expr) => {
+            std::io::Cursor::new($str.as_bytes())
+        };
+    }
+
+    macro_rules! assert_next {
+        ($tokenizer:ident, $token:expr) => {
+            assert_eq!($token, $tokenizer.next().unwrap())
+        };
+    }
+
+    #[test]
+    fn text_is_tokenized_as_chars() {
+        let mut stream = stream!("text");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char('t'));
+        assert_next!(tokenizer, Token::Char('e'));
+        assert_next!(tokenizer, Token::Char('x'));
+        assert_next!(tokenizer, Token::Char('t'));
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn eof_is_repeatedly_returned() {
+        let mut stream = stream!("t");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char('t'));
+        assert_next!(tokenizer, Token::EndOfFile);
+        assert_next!(tokenizer, Token::EndOfFile);
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn line_breaks_are_tokenized_with_cr_and_lf() {
+        let mut stream = stream!("1\n2\r\n");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char('1'));
+        assert_next!(tokenizer, Token::LineFeed);
+        assert_next!(tokenizer, Token::Char('2'));
+        assert_next!(tokenizer, Token::CarriageReturn);
+        assert_next!(tokenizer, Token::LineFeed);
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn other_special_characters_are_tokenize_as_char() {
+        let mut stream = stream!("\t\0\\");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char('\t'));
+        assert_next!(tokenizer, Token::Char('\0'));
+        assert_next!(tokenizer, Token::Char('\\'));
+        assert_next!(tokenizer, Token::EndOfFile);
     }
 }
