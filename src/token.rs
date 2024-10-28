@@ -25,43 +25,98 @@ impl std::fmt::Display for Token {
                 // container in Linux
                 write!(f, "\u{240a}\r\n")
             }
-            Token::EscapeSequence(_) => write!(f, "<ESC>"),
-            Token::EndOfFile => write!(f, "\u{2404}"),
+            Self::EscapeSequence(_) => write!(f, "<ESC>"),
+            Self::EndOfFile => write!(f, "\u{2404}"),
         }
     }
 }
 
+impl Token {
+    /// Create token from a char without taking escape sequences into account
+    fn from_single_char(c: char) -> Self {
+        match c {
+            '\r' => Self::CarriageReturn,
+            '\n' => Self::LineFeed,
+            _ => Self::Char(c),
+        }
+    }
+}
+
+/// A tokenizer consuming a stream of characters.
+///
+/// The tokenizer can detect multi-character ANSI escape sequences and tokenize them as single
+/// characters. It serially reads characters rather than consume complete lines to be able to
+/// detect escaoe sequences before a newline (where stdout is usually flushed). Escape sequences
+/// are used to overwrite the same line several times but this tool wants to detect this and
+/// show all output,
 pub struct SerialTokenizer<'a, R: Read> {
     stream: &'a mut R,
-    /// A buffer for handling
-    _escape_buf: String,
+    /// A buffer to hold characters while detecting ANSI escape sequences
+    escape_buf: String,
 }
 
 impl<'a, R: Read> SerialTokenizer<'a, R> {
     pub fn new(stream: &'a mut R) -> Self {
         Self {
             stream,
-            _escape_buf: String::new(),
+            escape_buf: String::with_capacity(32),
         }
     }
 
+    /// Gets the next token from the stream
     pub fn next(&mut self) -> Result<Token, std::io::Error> {
-        if let Some(c) = read_char(self.stream)? {
-            Ok(match c {
-                '\r' => Token::CarriageReturn,
-                '\n' => Token::LineFeed,
-                // TODO: Escape sequencees
-                _ => Token::Char(c),
-            })
+        if self.escape_buf.is_empty() {
+            if let Some(c) = read_char(self.stream)? {
+                if c == escape::ESC {
+                    self.escape_buf.push(c);
+                    self.detect_and_get_escape()
+                } else {
+                    Ok(Token::from_single_char(c))
+                }
+            } else {
+                Ok(Token::EndOfFile)
+            }
+        } else if self.escape_buf.chars().next().unwrap() == escape::ESC {
+            self.detect_and_get_escape()
         } else {
-            Ok(Token::EndOfFile)
+            Ok(self.take_char_from_buffer())
         }
+    }
+
+    fn detect_and_get_escape(&mut self) -> Result<Token, std::io::Error> {
+        assert!(!self.escape_buf.is_empty());
+        while let Some(c) = read_char(self.stream)? {
+            self.escape_buf.push(c);
+            if c.is_control() {
+                // Control character, e.g., newline. This can't be part of ANSI escape sequence and
+                // we don't want to read further since it might block unnecessarily, e.g., if an
+                // application outputs to stdout it is usually flushed at newlines and we don't
+                // want to wait for a complete extra line.
+                break;
+            }
+            if let Some(sequence) = escape::Sequence::from(self.escape_buf.as_str()) {
+                self.escape_buf.clear();
+                return Ok(Token::EscapeSequence(sequence));
+            }
+        }
+
+        Ok(self.take_char_from_buffer())
+    }
+
+    fn take_char_from_buffer(&mut self) -> Token {
+        assert!(!self.escape_buf.is_empty());
+        let c = self.escape_buf.chars().next().unwrap();
+        // TODO: Can we use some other type to avoid copying strings?
+        self.escape_buf.remove(0);
+        Token::from_single_char(c)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    type ES = escape::Sequence;
 
     // Creates a string slice just containing an ANSI escape sequence
     macro_rules! stream {
@@ -98,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn line_breaks_are_tokenized_with_cr_and_lf() {
+    fn line_breaks_are_tokenized_as_cr_and_lf() {
         let mut stream = stream!("1\n2\r\n");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
         assert_next!(tokenizer, Token::Char('1'));
@@ -110,7 +165,57 @@ mod tests {
     }
 
     #[test]
-    fn other_special_characters_are_tokenize_as_char() {
+    fn sole_escape_sequence_is_tokenized_as_such() {
+        let mut stream = stream!("\x1b[H");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveHome));
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn consecutive_escape_sequences_are_tokenized_as_such() {
+        let mut stream = stream!("\x1b[H\x1bM");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveHome));
+        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveUpOne));
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn escape_sequence_in_text_is_tokenized_as_such() {
+        let mut stream = stream!("1\x1b[17;42f2");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char('1'));
+        assert_next!(
+            tokenizer,
+            Token::EscapeSequence(ES::CursorMoveToLineAndColumn((17, 42)))
+        );
+        assert_next!(tokenizer, Token::Char('2'));
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn escape_that_is_not_sequence_is_tokenized_as_char() {
+        let mut stream = stream!("\x1b[1");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char(escape::ESC));
+        assert_next!(tokenizer, Token::Char('['));
+        assert_next!(tokenizer, Token::Char('1'));
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn escape_that_is_not_sequence_near_newline_is_tokenized_as_char() {
+        let mut stream = stream!("\x1b[\n");
+        let mut tokenizer = SerialTokenizer::new(&mut stream);
+        assert_next!(tokenizer, Token::Char(escape::ESC));
+        assert_next!(tokenizer, Token::Char('['));
+        assert_next!(tokenizer, Token::LineFeed);
+        assert_next!(tokenizer, Token::EndOfFile);
+    }
+
+    #[test]
+    fn other_special_characters_are_tokenized_as_char() {
         let mut stream = stream!("\t\0\\");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
         assert_next!(tokenizer, Token::Char('\t'));

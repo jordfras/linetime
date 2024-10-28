@@ -52,7 +52,7 @@ pub enum Sequence {
 }
 
 /// The escape character
-const ESC: char = '\x1b';
+pub const ESC: char = '\x1b';
 
 /// Regex to catch escape sequences
 static SEQUENCE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
