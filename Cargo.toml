@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Thomas Johannesson"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
 
 [dependencies.regex]
 version = "1.11.1"

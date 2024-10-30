@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 /// Representation of various ANSI escape sequences, in particular sequences for moving and
 /// erasing. Sequences are strings starting with the esc character to control console behavior.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Sequence {
     pub command: SequenceCommand,
     pub text: String,
@@ -11,7 +11,7 @@ pub struct Sequence {
 
 /// The command an escape sequences represents, see
 /// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 for reference
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SequenceCommand {
     /// ESC[H
     CursorMoveHome,
