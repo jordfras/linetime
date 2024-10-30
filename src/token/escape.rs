@@ -3,10 +3,16 @@ use std::sync::LazyLock;
 
 /// Representation of various ANSI escape sequences, in particular sequences for moving and
 /// erasing. Sequences are strings starting with the esc character to control console behavior.
-///
-/// See https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 for reference
 #[derive(Debug, PartialEq)]
-pub enum Sequence {
+pub struct Sequence {
+    pub command: SequenceCommand,
+    pub text: String,
+}
+
+/// The command an escape sequences represents, see
+/// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 for reference
+#[derive(Debug, PartialEq)]
+pub enum SequenceCommand {
     /// ESC[H
     CursorMoveHome,
     /// ESC[#;#H or ESC[#;#f
@@ -76,15 +82,24 @@ static SEQUENCE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 impl Sequence {
-    /// Creates an escape sequence enum from a string
+    /// Creates an escape sequence struct from a string
     pub fn from(buffer: &str) -> Option<Self> {
+        SequenceCommand::from(buffer).map(|command| Self {
+            command,
+            text: buffer.to_string(),
+        })
+    }
+}
+
+impl SequenceCommand {
+    fn from(buffer: &str) -> Option<Self> {
         let captures = (*SEQUENCE_REGEX).captures(buffer)?;
         assert_eq!(4, captures.len());
 
         if let Some(cap1) = captures.get(1) {
             assert_eq!(None, captures.get(2));
             assert_eq!(1, cap1.len());
-            Self::from_seq_without_bracket(cap1.as_str().chars().nth(0).unwrap())
+            Self::without_bracket(cap1.as_str().chars().nth(0).unwrap())
         } else {
             let numbers = if let Some(numbers) = captures.get(2) {
                 numbers
@@ -98,12 +113,12 @@ impl Sequence {
             let cap3 = captures.get(3).expect("Regex should find end character");
             assert_eq!(1, cap3.len());
             let c = cap3.as_str().chars().nth(0).unwrap();
-            Self::from_seq_with_bracket(numbers, c)
+            Self::with_bracket(numbers, c)
         }
     }
 
     // Sequence like "ESC M" (without '[')
-    fn from_seq_without_bracket(c: char) -> Option<Self> {
+    fn without_bracket(c: char) -> Option<Self> {
         Some(match c {
             'M' => Self::CursorMoveUpOne,
             '7' => Self::CursorSavePosition,
@@ -113,7 +128,7 @@ impl Sequence {
     }
 
     // Sequence with '[', like "ESC[17;42f"
-    fn from_seq_with_bracket(numbers: Vec<u32>, c: char) -> Option<Self> {
+    fn with_bracket(numbers: Vec<u32>, c: char) -> Option<Self> {
         Some(match numbers.len() {
             0 => match c {
                 'H' => Self::CursorMoveHome,
@@ -168,7 +183,6 @@ impl Sequence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    type ES = Sequence;
 
     // Creates a string slice just containing an ANSI escape sequence
     macro_rules! esc {
@@ -178,14 +192,20 @@ mod tests {
     }
 
     macro_rules! assert_esc {
-        ($sequence:expr, $sequence_str:expr) => {
-            assert_eq!($sequence, ES::from($sequence_str).unwrap())
+        ($command:expr, $text:expr) => {
+            assert_eq!(
+                Sequence {
+                    command: $command,
+                    text: $text.to_string()
+                },
+                Sequence::from($text).unwrap()
+            )
         };
     }
 
     macro_rules! assert_incomplete_esc {
-        ($sequence_str:expr) => {
-            assert_eq!(None, ES::from($sequence_str))
+        ($text:expr) => {
+            assert_eq!(None, Sequence::from($text))
         };
     }
 
@@ -201,42 +221,57 @@ mod tests {
 
     #[test]
     fn match_escape_returns_correct_escape_sequences() {
-        assert_esc!(ES::CursorMoveUpOne, esc!("M"));
-        assert_esc!(ES::CursorSavePosition, esc!("7"));
-        assert_esc!(ES::CursorRestorePosition, esc!("8"));
-        assert_esc!(ES::CursorMoveHome, esc!("[H"));
-        assert_esc!(ES::CursorSavePosition, esc!("[s"));
-        assert_esc!(ES::CursorRestorePosition, esc!("[u"));
+        assert_esc!(SequenceCommand::CursorMoveUpOne, esc!("M"));
+        assert_esc!(SequenceCommand::CursorSavePosition, esc!("7"));
+        assert_esc!(SequenceCommand::CursorRestorePosition, esc!("8"));
+        assert_esc!(SequenceCommand::CursorMoveHome, esc!("[H"));
+        assert_esc!(SequenceCommand::CursorSavePosition, esc!("[s"));
+        assert_esc!(SequenceCommand::CursorRestorePosition, esc!("[u"));
 
-        assert_esc!(ES::CursorMoveLinesUp(17), esc!("[17A"));
-        assert_esc!(ES::CursorMoveLinesDown(18), esc!("[18B"));
-        assert_esc!(ES::CursorMoveColumnsRight(19), esc!("[19C"));
-        assert_esc!(ES::CursorMoveColumnsLeft(20), esc!("[20D"));
-        assert_esc!(ES::CursorMoveBeginningLinesUp(21), esc!("[21E"));
-        assert_esc!(ES::CursorMoveBeginningLinesDown(22), esc!("[22F"));
-        assert_esc!(ES::CursorMoveToColumn(23), esc!("[23G"));
-        assert_esc!(ES::CursorRequestPosition, esc!("[6n"));
+        assert_esc!(SequenceCommand::CursorMoveLinesUp(17), esc!("[17A"));
+        assert_esc!(SequenceCommand::CursorMoveLinesDown(18), esc!("[18B"));
+        assert_esc!(SequenceCommand::CursorMoveColumnsRight(19), esc!("[19C"));
+        assert_esc!(SequenceCommand::CursorMoveColumnsLeft(20), esc!("[20D"));
+        assert_esc!(
+            SequenceCommand::CursorMoveBeginningLinesUp(21),
+            esc!("[21E")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMoveBeginningLinesDown(22),
+            esc!("[22F")
+        );
+        assert_esc!(SequenceCommand::CursorMoveToColumn(23), esc!("[23G"));
+        assert_esc!(SequenceCommand::CursorRequestPosition, esc!("[6n"));
 
-        assert_esc!(ES::EraseFromCursorToEndOfScreen, esc!("[J"));
-        assert_esc!(ES::EraseFromCursorToEndOfScreen, esc!("[0J"));
-        assert_esc!(ES::EraseFromBeginningOfScreenToCursor, esc!("[1J"));
-        assert_esc!(ES::EraseEntireScreen, esc!("[2J"));
-        assert_esc!(ES::EraseSavedLines, esc!("[3J"));
-        assert_esc!(ES::EraseFromCursorToEndOfLine, esc!("[K"));
-        assert_esc!(ES::EraseFromCursorToEndOfLine, esc!("[0K"));
-        assert_esc!(ES::EraseFromStartOfLineToCursor, esc!("[1K"));
-        assert_esc!(ES::EraseEntireLine, esc!("[2K"));
+        assert_esc!(SequenceCommand::EraseFromCursorToEndOfScreen, esc!("[J"));
+        assert_esc!(SequenceCommand::EraseFromCursorToEndOfScreen, esc!("[0J"));
+        assert_esc!(
+            SequenceCommand::EraseFromBeginningOfScreenToCursor,
+            esc!("[1J")
+        );
+        assert_esc!(SequenceCommand::EraseEntireScreen, esc!("[2J"));
+        assert_esc!(SequenceCommand::EraseSavedLines, esc!("[3J"));
+        assert_esc!(SequenceCommand::EraseFromCursorToEndOfLine, esc!("[K"));
+        assert_esc!(SequenceCommand::EraseFromCursorToEndOfLine, esc!("[0K"));
+        assert_esc!(SequenceCommand::EraseFromStartOfLineToCursor, esc!("[1K"));
+        assert_esc!(SequenceCommand::EraseEntireLine, esc!("[2K"));
 
-        assert_esc!(ES::CursorMoveToLineAndColumn((17, 42)), esc!("[17;42H"));
-        assert_esc!(ES::CursorMoveToLineAndColumn((17, 42)), esc!("[17;42f"));
+        assert_esc!(
+            SequenceCommand::CursorMoveToLineAndColumn((17, 42)),
+            esc!("[17;42H")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMoveToLineAndColumn((17, 42)),
+            esc!("[17;42f")
+        );
     }
 
     #[test]
     fn match_escape_returns_unhandled_for_other_escape_sequences() {
-        assert_esc!(ES::Unhandled, esc!("9"));
-        assert_esc!(ES::Unhandled, esc!("Q"));
-        assert_esc!(ES::Unhandled, esc!("[Q"));
-        assert_esc!(ES::Unhandled, esc!("[17Q"));
-        assert_esc!(ES::Unhandled, esc!("[17;18Q"));
+        assert_esc!(SequenceCommand::Unhandled, esc!("9"));
+        assert_esc!(SequenceCommand::Unhandled, esc!("Q"));
+        assert_esc!(SequenceCommand::Unhandled, esc!("[Q"));
+        assert_esc!(SequenceCommand::Unhandled, esc!("[17Q"));
+        assert_esc!(SequenceCommand::Unhandled, esc!("[17;18Q"));
     }
 }

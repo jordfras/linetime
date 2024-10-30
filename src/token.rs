@@ -116,7 +116,7 @@ impl<'a, R: Read> SerialTokenizer<'a, R> {
 mod tests {
     use super::*;
 
-    type ES = escape::Sequence;
+    type Command = escape::SequenceCommand;
 
     // Creates a string slice just containing an ANSI escape sequence
     macro_rules! stream {
@@ -128,6 +128,15 @@ mod tests {
     macro_rules! assert_next {
         ($tokenizer:ident, $token:expr) => {
             assert_eq!($token, $tokenizer.next().unwrap())
+        };
+    }
+
+    macro_rules! esc_token {
+        ($command:expr, $text: expr) => {
+            Token::EscapeSequence(escape::Sequence {
+                command: $command,
+                text: $text.to_string(),
+            })
         };
     }
 
@@ -168,7 +177,7 @@ mod tests {
     fn sole_escape_sequence_is_tokenized_as_such() {
         let mut stream = stream!("\x1b[H");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
-        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveHome));
+        assert_next!(tokenizer, esc_token!(Command::CursorMoveHome, "\x1b[H"));
         assert_next!(tokenizer, Token::EndOfFile);
     }
 
@@ -176,8 +185,8 @@ mod tests {
     fn consecutive_escape_sequences_are_tokenized_as_such() {
         let mut stream = stream!("\x1b[H\x1bM");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
-        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveHome));
-        assert_next!(tokenizer, Token::EscapeSequence(ES::CursorMoveUpOne));
+        assert_next!(tokenizer, esc_token!(Command::CursorMoveHome, "\x1b[H"));
+        assert_next!(tokenizer, esc_token!(Command::CursorMoveUpOne, "\x1bM"));
         assert_next!(tokenizer, Token::EndOfFile);
     }
 
@@ -188,7 +197,7 @@ mod tests {
         assert_next!(tokenizer, Token::Char('1'));
         assert_next!(
             tokenizer,
-            Token::EscapeSequence(ES::CursorMoveToLineAndColumn((17, 42)))
+            esc_token!(Command::CursorMoveToLineAndColumn((17, 42)), "\x1b[17;42f")
         );
         assert_next!(tokenizer, Token::Char('2'));
         assert_next!(tokenizer, Token::EndOfFile);
