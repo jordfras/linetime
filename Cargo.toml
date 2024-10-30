@@ -8,3 +8,4 @@ authors = ["Thomas Johannesson"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+regex = "1.11.1"
