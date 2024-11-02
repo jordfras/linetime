@@ -1,40 +1,25 @@
-use std::time::{Duration, SystemTime};
-
-mod read_char;
+mod output;
 mod token;
 
+use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
 
-fn format(duration: Duration) -> String {
-    format!(
-        "{:0>2}:{:0>2}.{:0>3}",
-        duration.as_secs() / 60,
-        duration.as_secs() % 60,
-        duration.subsec_millis()
-    )
-}
-
 fn main() {
-    let start_time = SystemTime::now();
     let mut stdin = std::io::stdin().lock();
-
-    let mut start_of_line = true;
     let mut tokenizer = SerialTokenizer::new(&mut stdin);
+    let mut stdout = std::io::stdout().lock();
+    let mut printer = Printer::new(&mut stdout);
+
     loop {
         match tokenizer.next() {
-            Ok(Token::EndOfFile) => {
-                println!("{}", Token::EndOfFile);
-                break;
-            }
             Ok(token) => {
-                if start_of_line {
-                    print!(
-                        "{}: ",
-                        format(SystemTime::now().duration_since(start_time).unwrap())
-                    );
+                if let Err(error) = printer.print(&token) {
+                    eprintln!("Error writing to stdout: {error}");
+                    std::process::exit(2);
                 }
-                print!("{}", token);
-                start_of_line = token == Token::LineFeed;
+                if token == Token::EndOfFile {
+                    break;
+                }
             }
             Err(error) => {
                 eprintln!("Error reading from stdin: {error}");

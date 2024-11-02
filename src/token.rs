@@ -1,9 +1,10 @@
-use crate::read_char::read_char;
+pub mod escape;
+mod read_char;
+
+use crate::token::read_char::read_char;
 use std::io::Read;
 
-mod escape;
-
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     // A single character
     Char(char),
@@ -13,22 +14,6 @@ pub enum Token {
     EscapeSequence(escape::Sequence),
     // End of file, i.e., end of input stream
     EndOfFile,
-}
-
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Char(c) => write!(f, "{c}"),
-            Self::CarriageReturn => write!(f, "\u{240d}"),
-            Self::LineFeed => {
-                // Write \r to ensure starting on new line when handling output from Docker Windows
-                // container in Linux
-                write!(f, "\u{240a}\r\n")
-            }
-            Self::EscapeSequence(_) => write!(f, "<ESC>"),
-            Self::EndOfFile => write!(f, "\u{2404}"),
-        }
-    }
 }
 
 impl Token {
