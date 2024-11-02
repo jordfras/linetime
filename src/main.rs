@@ -1,5 +1,4 @@
 mod output;
-mod read_char;
 mod token;
 
 use crate::output::Printer;

@@ -1,7 +1,8 @@
-use crate::read_char::read_char;
-use std::io::Read;
-
 pub mod escape;
+mod read_char;
+
+use crate::token::read_char::read_char;
+use std::io::Read;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
