@@ -1,5 +1,6 @@
 use crate::token::escape;
 use crate::token::Token;
+use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Duration;
 
@@ -9,8 +10,9 @@ use crate::output::timestamp::Timestamp;
 pub struct Printer<'a, W: Write> {
     stream: &'a mut W,
     timestamp: Timestamp,
+    start_of_stream: bool,
     start_of_line: bool,
-    previous_token: Option<Token>,
+    break_tokens: VecDeque<Token>,
 }
 
 impl<'a, W: Write> Printer<'a, W> {
@@ -18,16 +20,43 @@ impl<'a, W: Write> Printer<'a, W> {
         Self {
             stream,
             timestamp: Timestamp::new(),
+            start_of_stream: true,
             start_of_line: true,
-            previous_token: None,
+            break_tokens: VecDeque::new(),
         }
     }
 
     pub fn print(&mut self, token: &Token) -> Result<(), std::io::Error> {
-        self.maybe_print_timestamp()?;
+        if Self::causes_soft_break(token) {
+            self.break_tokens.push_back(token.clone());
+        } else if !self.break_tokens.is_empty() && *token != Token::LineFeed {
+            self.newline()?;
+        }
+
+        if self.start_of_line {
+            self.timestamp()?;
+        }
+
         self.print_token(token)?;
-        self.previous_token = Some(token.clone());
+        if *token == Token::LineFeed {
+            self.newline()?;
+        }
+
+        self.start_of_stream = false;
         Ok(())
+    }
+
+    fn causes_soft_break(token: &Token) -> bool {
+        match token {
+            // Ensure new line to handle cases where CR is used to overwrite the same line over
+            // and over again. We want to see all input.
+            Token::CarriageReturn => true,
+            Token::EscapeSequence(sequence) => {
+                // Unhandled escape sequences are just forwarded, as-is
+                sequence.command != escape::SequenceCommand::Unhandled
+            }
+            _ => false,
+        }
     }
 
     fn print_str(&mut self, s: &str) -> Result<(), std::io::Error> {
@@ -36,22 +65,12 @@ impl<'a, W: Write> Printer<'a, W> {
 
     fn print_token(&mut self, token: &Token) -> Result<(), std::io::Error> {
         match token {
-            // TODO: More efficient way to write char?
-            Token::Char(c) => self.print_str(c.to_string().as_str()),
-            Token::CarriageReturn => {
-                self.start_of_line = true;
-                // Write new line as well to handle cases where CR is used to overwrite the same
-                // line over and over again. We want to see all input.
-                self.print_str("\u{240d}\r\n")
+            Token::Char(c) => {
+                let mut buffer: [u8; 4] = [0; 4];
+                self.print_str(c.encode_utf8(&mut buffer))
             }
-            Token::LineFeed => {
-                self.print_str("\u{240a}")?;
-                if self.previous_token != Some(Token::CarriageReturn) {
-                    self.start_of_line = true;
-                    self.print_str("\n")?;
-                }
-                Ok(())
-            }
+            Token::CarriageReturn => self.print_str("\u{240d}"),
+            Token::LineFeed => self.print_str("\u{240a}"),
             Token::EscapeSequence(sequence) => {
                 if sequence.command == escape::SequenceCommand::Unhandled {
                     self.print_str(sequence.text.as_str())
@@ -60,17 +79,30 @@ impl<'a, W: Write> Printer<'a, W> {
                     self.print_str(&sequence.text[1..])
                 }
             }
-            Token::EndOfFile => self.print_str("\u{2404}"),
+            Token::EndOfFile => self.print_str("\u{2404}\n"),
         }
     }
 
-    fn maybe_print_timestamp(&mut self) -> Result<(), std::io::Error> {
-        if self.start_of_line {
-            self.start_of_line = false;
-            let t = self.timestamp.get();
-            self.print_str(format(t).as_str())?;
-            self.print_str(": ")?;
+    fn newline(&mut self) -> Result<(), std::io::Error> {
+        while let Some(token) = self.break_tokens.pop_front() {
+            if token == Token::CarriageReturn {
+                self.print_str("\r")?;
+            }
         }
+
+        if !self.start_of_stream {
+            self.print_str("\n")?;
+        }
+
+        self.start_of_line = true;
+        Ok(())
+    }
+
+    fn timestamp(&mut self) -> Result<(), std::io::Error> {
+        let t = self.timestamp.get();
+        self.print_str(format(t).as_str())?;
+        self.print_str(": ")?;
+        self.start_of_line = false;
         Ok(())
     }
 }
@@ -158,7 +190,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn cr_lf_causes_only_one_newline_but_cr_is_forwarded() {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(&mut stream);
@@ -176,7 +207,35 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    fn multiples_new_lines_are_handled() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::CarriageReturn).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::CarriageReturn).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+
+        printer.timestamp.expect_get(Duration::from_secs(5));
+        printer.print(&Token::LineFeed).unwrap();
+
+        printer.timestamp.expect_get(Duration::from_secs(6));
+        printer.print(&Token::LineFeed).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(
+            stream,
+            "00:03.000: \u{240d}\u{240a}\r\n",
+            "00:04.000: \u{240d}\u{240a}\r\n",
+            "00:05.000: \u{240a}\n",
+            "00:06.000: \u{240a}\n"
+        );
+    }
+
+    #[test]
     fn cr_escape_erase_to_end_of_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(&mut stream);
@@ -195,11 +254,10 @@ mod tests {
         printer.print(&Token::Char('B')).unwrap();
 
         printer.timestamp.expect_empty();
-        assert_printed!(stream, "00:03.000: A\u{241b}[K\n", "00:04.000: B");
+        assert_printed!(stream, "00:03.000: A\u{240d}\u{241b}[K\r\n", "00:04.000: B");
     }
 
     #[test]
-    #[ignore]
     fn escape_erase_entire_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(&mut stream);
