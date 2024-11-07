@@ -45,6 +45,9 @@ impl<'a, W: Write> Printer<'a, W> {
 
         if self.start_of_line {
             self.timestamp()?;
+        } else if *token == Token::EndOfFile {
+            self.print_str("\n")?;
+            self.timestamp()?;
         }
 
         self.print_token(token)?;
@@ -326,6 +329,35 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000: A\x1b[31mB");
+    }
+
+    #[test]
+    fn end_of_file_with_newline_before() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = printer_showing_all(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::EndOfFile).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: \u{2404}\n");
+    }
+
+    #[test]
+    fn end_of_file_without_newline_before() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = printer_showing_all(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::EndOfFile).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A\n", "00:04.000: \u{2404}\n");
     }
 
     #[test]
