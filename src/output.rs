@@ -7,8 +7,17 @@ use std::time::Duration;
 mod timestamp;
 use crate::output::timestamp::Timestamp;
 
+pub struct Options {
+    /// Show control characters as unicode symbols
+    pub show_control: bool,
+    /// Show handled escape sequences as string with unciode symbol for the escape character
+    pub show_escape: bool,
+}
+
 pub struct Printer<'a, W: Write> {
     stream: &'a mut W,
+    options: Options,
+
     timestamp: Timestamp,
     start_of_stream: bool,
     start_of_line: bool,
@@ -16,9 +25,10 @@ pub struct Printer<'a, W: Write> {
 }
 
 impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(stream: &'a mut W) -> Self {
+    pub fn new(stream: &'a mut W, options: Options) -> Self {
         Self {
             stream,
+            options,
             timestamp: Timestamp::new(),
             start_of_stream: true,
             start_of_line: true,
@@ -34,6 +44,9 @@ impl<'a, W: Write> Printer<'a, W> {
         }
 
         if self.start_of_line {
+            self.timestamp()?;
+        } else if *token == Token::EndOfFile {
+            self.print_str("\n")?;
             self.timestamp()?;
         }
 
@@ -63,20 +76,34 @@ impl<'a, W: Write> Printer<'a, W> {
         self.stream.write_all(s.as_ref())
     }
 
+    fn print_control(&mut self, s: &str) -> Result<(), std::io::Error> {
+        if self.options.show_control {
+            self.print_str(s)?;
+        }
+        Ok(())
+    }
+
+    fn print_escape(&mut self, s: &str) -> Result<(), std::io::Error> {
+        if self.options.show_escape {
+            self.print_str(s)?;
+        }
+        Ok(())
+    }
+
     fn print_token(&mut self, token: &Token) -> Result<(), std::io::Error> {
         match token {
             Token::Char(c) => {
                 let mut buffer: [u8; 4] = [0; 4];
                 self.print_str(c.encode_utf8(&mut buffer))
             }
-            Token::CarriageReturn => self.print_str("\u{240d}"),
-            Token::LineFeed => self.print_str("\u{240a}"),
+            Token::CarriageReturn => self.print_control("\u{240d}"),
+            Token::LineFeed => self.print_control("\u{240a}"),
             Token::EscapeSequence(sequence) => {
                 if sequence.command == escape::SequenceCommand::Unhandled {
                     self.print_str(sequence.text.as_str())
                 } else {
-                    self.print_str("\u{241b}")?;
-                    self.print_str(&sequence.text[1..])
+                    self.print_escape("\u{241b}")?;
+                    self.print_escape(&sequence.text[1..])
                 }
             }
             Token::EndOfFile => self.print_str("\u{2404}\n"),
@@ -144,10 +171,20 @@ mod tests {
         };
     }
 
+    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_, Vec<u8>> {
+        Printer::new(
+            stream,
+            Options {
+                show_control: true,
+                show_escape: true,
+            },
+        )
+    }
+
     #[test]
     fn timestamp_is_added_at_beginning_of_lines() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -159,7 +196,7 @@ mod tests {
     #[test]
     fn timestamp_is_requested_for_first_token_on_line() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -176,7 +213,7 @@ mod tests {
     #[test]
     fn overwriting_line_with_cr_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -192,7 +229,7 @@ mod tests {
     #[test]
     fn cr_lf_causes_only_one_newline_but_cr_is_forwarded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -209,7 +246,7 @@ mod tests {
     #[test]
     fn multiples_new_lines_are_handled() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::CarriageReturn).unwrap();
@@ -238,7 +275,7 @@ mod tests {
     #[test]
     fn cr_escape_erase_to_end_of_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -260,7 +297,7 @@ mod tests {
     #[test]
     fn escape_erase_entire_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -281,7 +318,7 @@ mod tests {
     #[test]
     fn escape_coloring_is_unchanged() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = Printer::new(&mut stream);
+        let mut printer = printer_showing_all(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -292,5 +329,77 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000: A\x1b[31mB");
+    }
+
+    #[test]
+    fn end_of_file_with_newline_before() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = printer_showing_all(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::EndOfFile).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: \u{2404}\n");
+    }
+
+    #[test]
+    fn end_of_file_without_newline_before() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = printer_showing_all(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::EndOfFile).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A\n", "00:04.000: \u{2404}\n");
+    }
+
+    #[test]
+    fn disabling_showing_control_characters_hides_symbol_for_linefeed() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Options {
+                show_control: false,
+                show_escape: true,
+            },
+        );
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A\n");
+    }
+
+    #[test]
+    fn disabling_showing_escape_sequence_hides_handled_sequence() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Options {
+                show_control: true,
+                show_escape: false,
+            },
+        );
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+        printer
+            .print(&esc_token!(
+                escape::SequenceCommand::EraseEntireLine,
+                "\x1b[2K"
+            ))
+            .unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: A");
     }
 }

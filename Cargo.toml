@@ -6,6 +6,7 @@ license = "MIT"
 authors = ["Thomas Johannesson"]
 
 [dependencies]
+gumdrop = "0.8.1"
 
 [dependencies.regex]
 version = "1.11.1"
