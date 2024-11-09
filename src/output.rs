@@ -19,7 +19,6 @@ pub struct Printer<'a, W: Write> {
     options: Options,
 
     timestamp: Timestamp,
-    start_of_stream: bool,
     start_of_line: bool,
     break_tokens: VecDeque<Token>,
 }
@@ -30,7 +29,6 @@ impl<'a, W: Write> Printer<'a, W> {
             stream,
             options,
             timestamp: Timestamp::new(),
-            start_of_stream: true,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -40,12 +38,16 @@ impl<'a, W: Write> Printer<'a, W> {
         if Self::causes_soft_break(token) {
             self.break_tokens.push_back(token.clone());
         } else if !self.break_tokens.is_empty() && *token != Token::LineFeed {
+            // Soft break triggers newline when not followed by a linefeed, to unwrap lines
+            // otherwise being overwritten in the terminal
             self.newline()?;
         }
 
         if self.start_of_line {
             self.timestamp()?;
         } else if *token == Token::EndOfFile {
+            // Ensure EOF is always written on a new line with its own timestamp, even if an
+            // explicit linefeed token was not received before
             self.print_str("\n")?;
             self.timestamp()?;
         }
@@ -55,7 +57,6 @@ impl<'a, W: Write> Printer<'a, W> {
             self.newline()?;
         }
 
-        self.start_of_stream = false;
         Ok(())
     }
 
@@ -117,10 +118,7 @@ impl<'a, W: Write> Printer<'a, W> {
             }
         }
 
-        if !self.start_of_stream {
-            self.print_str("\n")?;
-        }
-
+        self.print_str("\n")?;
         self.start_of_line = true;
         Ok(())
     }
@@ -344,6 +342,20 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: \u{2404}\n");
+    }
+
+    #[test]
+    fn end_of_file_with_empty_line_before() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = printer_showing_all(&mut stream);
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::LineFeed).unwrap();
+        printer.timestamp.expect_get(Duration::from_secs(4));
+        printer.print(&Token::EndOfFile).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000: \u{240a}\n", "00:04.000: \u{2404}\n");
     }
 
     #[test]
