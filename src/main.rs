@@ -32,8 +32,8 @@ struct ProgramOptions {
 fn show_help(program_name: &str) {
     println!("Usage: {program_name} [option ...] command [argument ...]");
     println!("       {program_name} [option ...] -- command [argument ...]");
-    println!("       command [argument] > {program_name} [option ...]");
-    println!("       command [argument] 2>&1 {program_name} [option ...]");
+    println!("       command [argument] | {program_name} [option ...]");
+    println!("       command [argument] 2>&1 | {program_name} [option ...]");
     println!();
     println!("Reads from stdin and prefixes each line with a timestamp.");
     println!("Unfolding is attempted for input trying to ovewrite the current line.");
