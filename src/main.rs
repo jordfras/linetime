@@ -54,7 +54,7 @@ fn loop_input<R: Read>(input: &mut R, output_options: output::Options, dump_toke
                 }
                 if let Err(error) = printer.print(&token) {
                     eprintln!("Error writing to stdout: {error}");
-                    std::process::exit(2);
+                    std::process::exit(1);
                 }
                 if token == Token::EndOfFile {
                     break;
@@ -62,7 +62,7 @@ fn loop_input<R: Read>(input: &mut R, output_options: output::Options, dump_toke
             }
             Err(error) => {
                 eprintln!("Error reading input: {error}");
-                std::process::exit(3);
+                std::process::exit(1);
             }
         }
     }
@@ -78,13 +78,26 @@ fn loop_command_output(
     output_options: output::Options,
     dump_tokens: bool,
 ) -> Result<(), std::io::Error> {
-    let child_process = Command::new(command_and_args[0].as_str())
+    let mut child_process = Command::new(command_and_args[0].as_str())
         .args(&command_and_args[1..])
         .stdout(Stdio::piped())
         .spawn()?;
 
-    let mut child_out = child_process.stdout.expect("Output expected to be piped");
+    let mut child_out = child_process
+        .stdout
+        .take()
+        .expect("Output expected to be piped");
     loop_input(&mut child_out, output_options, dump_tokens);
+
+    let status = child_process.wait()?;
+    if !status.success() {
+        if let Some(code) = status.code() {
+            println!("Command exited with {code}");
+            std::process::exit(code);
+        } else {
+            println!("Command terminated by signal");
+        }
+    }
     Ok(())
 }
 
