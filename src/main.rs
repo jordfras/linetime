@@ -1,3 +1,4 @@
+mod error;
 mod output;
 mod token;
 
@@ -6,6 +7,8 @@ use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
 use std::io::Read;
 use std::process::{Command, Stdio};
+
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 #[derive(Debug, Options)]
 struct ProgramOptions {
@@ -45,7 +48,7 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn loop_input<R: Read>(input: &mut R, output_options: output::Options) {
+fn loop_input<R: Read>(input: &mut R, output_options: output::Options) -> Result<()> {
     let mut tokenizer = SerialTokenizer::new(input);
     let mut stdout = std::io::stdout().lock();
     let mut printer = Printer::new(&mut stdout, output_options);
@@ -53,43 +56,43 @@ fn loop_input<R: Read>(input: &mut R, output_options: output::Options) {
     loop {
         match tokenizer.next() {
             Ok(token) => {
-                if let Err(error) = printer.print(&token) {
-                    eprintln!("Error writing to stdout: {error}");
-                    std::process::exit(1);
-                }
+                printer
+                    .print(&token)
+                    .map_err(|e| error::Error::wrap("Error writing to stdout", Box::new(e)))?;
                 if token == Token::EndOfFile {
                     break;
                 }
             }
             Err(error) => {
-                eprintln!("Error reading input: {error}");
-                std::process::exit(1);
+                return Err(error::Error::wrap("Error reading input", Box::new(error)));
             }
         }
     }
+    Ok(())
 }
 
-fn loop_stdin(output_options: output::Options) {
+fn loop_stdin(output_options: output::Options) -> Result<()> {
     let mut stdin = std::io::stdin().lock();
-    loop_input(&mut stdin, output_options);
+    loop_input(&mut stdin, output_options)
 }
 
 fn loop_command_output(
     command_and_args: Vec<String>,
     output_options: output::Options,
-) -> Result<(), std::io::Error> {
+) -> Result<()> {
     let mut child_process = Command::new(command_and_args[0].as_str())
         .args(&command_and_args[1..])
         .stdout(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .map_err(|e| error::Error::wrap("Failed to execute command", Box::new(e)))?;
 
     let mut child_out = child_process
         .stdout
         .take()
         .expect("Output expected to be piped");
-    loop_input(&mut child_out, output_options);
+    loop_input(&mut child_out, output_options)?;
 
-    let status = child_process.wait()?;
+    let status = child_process.wait().expect("Command expected to run");
     if !status.success() {
         if let Some(code) = status.code() {
             println!("Command exited with {code}");
@@ -130,10 +133,12 @@ fn main() {
 
         let output_options = output_options(&options);
 
-        if options.command.is_empty() {
-            loop_stdin(output_options);
-        } else if let Err(error) = loop_command_output(options.command, output_options) {
-            eprintln!("Failed to execute command: {error}");
+        if let Err(error) = if options.command.is_empty() {
+            loop_stdin(output_options)
+        } else {
+            loop_command_output(options.command, output_options)
+        } {
+            eprintln!("{error}");
             std::process::exit(1);
         }
     } else {
