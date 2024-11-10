@@ -12,6 +12,10 @@ pub struct Options {
     pub show_control: bool,
     /// Show handled escape sequences as string with unciode symbol for the escape character
     pub show_escape: bool,
+    /// Dump each token to stderr
+    pub dump_tokens: bool,
+    /// Flush output stream after each token
+    pub flush_all: bool,
 }
 
 pub struct Printer<'a, W: Write> {
@@ -35,6 +39,10 @@ impl<'a, W: Write> Printer<'a, W> {
     }
 
     pub fn print(&mut self, token: &Token) -> Result<(), std::io::Error> {
+        if self.options.dump_tokens {
+            eprintln!("{:?}", token);
+        }
+
         if Self::causes_soft_break(token) {
             self.break_tokens.push_back(token.clone());
         } else if !self.break_tokens.is_empty() && *token != Token::LineFeed {
@@ -55,6 +63,9 @@ impl<'a, W: Write> Printer<'a, W> {
         self.print_token(token)?;
         if *token == Token::LineFeed {
             self.newline()?;
+        }
+        if self.options.flush_all {
+            self.stream.flush()?;
         }
 
         Ok(())
@@ -175,6 +186,8 @@ mod tests {
             Options {
                 show_control: true,
                 show_escape: true,
+                dump_tokens: false,
+                flush_all: false,
             },
         )
     }
@@ -380,6 +393,8 @@ mod tests {
             Options {
                 show_control: false,
                 show_escape: true,
+                dump_tokens: false,
+                flush_all: false,
             },
         );
 
@@ -399,6 +414,8 @@ mod tests {
             Options {
                 show_control: true,
                 show_escape: false,
+                dump_tokens: false,
+                flush_all: false,
             },
         );
 

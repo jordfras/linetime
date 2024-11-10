@@ -1,3 +1,4 @@
+mod error;
 mod output;
 mod token;
 
@@ -6,6 +7,8 @@ use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
 use std::io::Read;
 use std::process::{Command, Stdio};
+
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 #[derive(Debug, Options)]
 struct ProgramOptions {
@@ -21,6 +24,10 @@ struct ProgramOptions {
     #[options(short = "d", help = "dump all tokens to stderr")]
     #[cfg(debug_assertions)]
     dump_tokens: bool,
+
+    #[options(short = "f", help = "flush output after each token")]
+    #[cfg(debug_assertions)]
+    flush_all: bool,
 
     #[options(
         free,
@@ -41,7 +48,7 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn loop_input<R: Read>(input: &mut R, output_options: output::Options, dump_tokens: bool) {
+fn loop_input<R: Read>(input: &mut R, output_options: output::Options) -> Result<()> {
     let mut tokenizer = SerialTokenizer::new(input);
     let mut stdout = std::io::stdout().lock();
     let mut printer = Printer::new(&mut stdout, output_options);
@@ -49,52 +56,71 @@ fn loop_input<R: Read>(input: &mut R, output_options: output::Options, dump_toke
     loop {
         match tokenizer.next() {
             Ok(token) => {
-                if dump_tokens {
-                    eprintln!("{:?}", token);
-                }
-                if let Err(error) = printer.print(&token) {
-                    eprintln!("Error writing to stdout: {error}");
-                    std::process::exit(2);
-                }
+                printer
+                    .print(&token)
+                    .map_err(|e| error::Error::wrap("Error writing to stdout", Box::new(e)))?;
                 if token == Token::EndOfFile {
                     break;
                 }
             }
             Err(error) => {
-                eprintln!("Error reading input: {error}");
-                std::process::exit(3);
+                return Err(error::Error::wrap("Error reading input", Box::new(error)));
             }
         }
     }
+    Ok(())
 }
 
-fn loop_stdin(output_options: output::Options, dump_tokens: bool) {
+fn loop_stdin(output_options: output::Options) -> Result<()> {
     let mut stdin = std::io::stdin().lock();
-    loop_input(&mut stdin, output_options, dump_tokens);
+    loop_input(&mut stdin, output_options)
 }
 
 fn loop_command_output(
     command_and_args: Vec<String>,
     output_options: output::Options,
-    dump_tokens: bool,
-) -> Result<(), std::io::Error> {
-    let child_process = Command::new(command_and_args[0].as_str())
+) -> Result<()> {
+    let mut child_process = Command::new(command_and_args[0].as_str())
         .args(&command_and_args[1..])
         .stdout(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .map_err(|e| error::Error::wrap("Failed to execute command", Box::new(e)))?;
 
-    let mut child_out = child_process.stdout.expect("Output expected to be piped");
-    loop_input(&mut child_out, output_options, dump_tokens);
+    let mut child_out = child_process
+        .stdout
+        .take()
+        .expect("Output expected to be piped");
+    loop_input(&mut child_out, output_options)?;
+
+    let status = child_process.wait().expect("Command expected to run");
+    if !status.success() {
+        if let Some(code) = status.code() {
+            println!("Command exited with {code}");
+            std::process::exit(code);
+        } else {
+            println!("Command terminated by signal");
+        }
+    }
     Ok(())
 }
 
 #[cfg(debug_assertions)]
-fn should_dump_tokens(options: &ProgramOptions) -> bool {
-    options.dump_tokens
+fn output_options(options: &ProgramOptions) -> output::Options {
+    output::Options {
+        show_control: options.show_control,
+        show_escape: options.show_escape,
+        dump_tokens: options.dump_tokens,
+        flush_all: options.flush_all,
+    }
 }
 #[cfg(not(debug_assertions))]
-fn should_dump_tokens(_: &ProgramOptions) -> bool {
-    false
+fn output_options(options: &ProgramOptions) -> output::Options {
+    output::Options {
+        show_control: options.show_control,
+        show_escape: options.show_escape,
+        dump_tokens: false,
+        flush_all: false,
+    }
 }
 
 fn main() {
@@ -105,17 +131,14 @@ fn main() {
             return;
         }
 
-        let output_options = output::Options {
-            show_control: options.show_control,
-            show_escape: options.show_escape,
-        };
-        let dump_tokens = should_dump_tokens(&options);
+        let output_options = output_options(&options);
 
-        if options.command.is_empty() {
-            loop_stdin(output_options, dump_tokens);
-        } else if let Err(error) = loop_command_output(options.command, output_options, dump_tokens)
-        {
-            eprintln!("Failed to execute command: {error}");
+        if let Err(error) = if options.command.is_empty() {
+            loop_stdin(output_options)
+        } else {
+            loop_command_output(options.command, output_options)
+        } {
+            eprintln!("{error}");
             std::process::exit(1);
         }
     } else {
