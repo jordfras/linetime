@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Duration;
 
-mod timestamp;
+pub mod timestamp;
 use crate::output::timestamp::Timestamp;
 
 pub struct Options {
@@ -28,11 +28,11 @@ pub struct Printer<'a, W: Write> {
 }
 
 impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(stream: &'a mut W, options: Options) -> Self {
+    pub fn new(stream: &'a mut W, timestamp: Timestamp, options: Options) -> Self {
         Self {
             stream,
             options,
-            timestamp: Timestamp::new(),
+            timestamp,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -183,6 +183,7 @@ mod tests {
     fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_, Vec<u8>> {
         Printer::new(
             stream,
+            Timestamp::new(),
             Options {
                 show_control: true,
                 show_escape: true,
@@ -390,6 +391,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
+            Timestamp::new(),
             Options {
                 show_control: false,
                 show_escape: true,
@@ -411,6 +413,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
+            Timestamp::new(),
             Options {
                 show_control: true,
                 show_escape: false,

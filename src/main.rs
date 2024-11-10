@@ -2,6 +2,7 @@ mod error;
 mod output;
 mod token;
 
+use crate::output::timestamp::Timestamp;
 use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
@@ -51,7 +52,7 @@ fn show_help(program_name: &str) {
 fn loop_input<R: Read>(input: &mut R, output_options: output::Options) -> Result<()> {
     let mut tokenizer = SerialTokenizer::new(input);
     let mut stdout = std::io::stdout().lock();
-    let mut printer = Printer::new(&mut stdout, output_options);
+    let mut printer = Printer::new(&mut stdout, Timestamp::new(), output_options);
 
     loop {
         match tokenizer.next() {
