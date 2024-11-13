@@ -8,6 +8,8 @@ pub mod timestamp;
 use crate::output::timestamp::Timestamp;
 
 pub struct Options {
+    /// Prefix added to start of each line together with a timestamp
+    pub prefix: String,
     /// Show control characters as unicode symbols
     pub show_control: bool,
     /// Show handled escape sequences as string with unciode symbol for the escape character
@@ -137,6 +139,9 @@ impl<'a, W: Write> Printer<'a, W> {
     fn timestamp(&mut self) -> Result<(), std::io::Error> {
         let t = self.timestamp.get();
         self.print_str(format(t).as_str())?;
+        if !self.options.prefix.is_empty() {
+            self.print_str(format!(" {}", self.options.prefix).as_str())?;
+        }
         self.print_str(": ")?;
         self.start_of_line = false;
         Ok(())
@@ -185,6 +190,7 @@ mod tests {
             stream,
             Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: true,
                 show_escape: true,
                 dump_tokens: false,
@@ -393,6 +399,7 @@ mod tests {
             &mut stream,
             Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: false,
                 show_escape: true,
                 dump_tokens: false,
@@ -415,6 +422,7 @@ mod tests {
             &mut stream,
             Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: true,
                 show_escape: false,
                 dump_tokens: false,
@@ -433,5 +441,27 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000: A");
+    }
+
+    #[test]
+    fn prefix_should_be_added_with_timestamp() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Timestamp::new(),
+            Options {
+                prefix: "prefix".to_string(),
+                show_control: false,
+                show_escape: false,
+                dump_tokens: false,
+                flush_all: false,
+            },
+        );
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000 prefix: A");
     }
 }

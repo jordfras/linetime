@@ -109,6 +109,7 @@ fn loop_command_output(
 #[cfg(debug_assertions)]
 fn output_options(options: &ProgramOptions) -> output::Options {
     output::Options {
+        prefix: String::new(),
         show_control: options.show_control,
         show_escape: options.show_escape,
         dump_tokens: options.dump_tokens,
@@ -118,6 +119,7 @@ fn output_options(options: &ProgramOptions) -> output::Options {
 #[cfg(not(debug_assertions))]
 fn output_options(options: &ProgramOptions) -> output::Options {
     output::Options {
+        prefix: String::new(),
         show_control: options.show_control,
         show_escape: options.show_escape,
         dump_tokens: false,
