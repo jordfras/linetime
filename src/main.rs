@@ -2,6 +2,7 @@ mod error;
 mod output;
 mod token;
 
+use crate::error::{ErrorWithContext, ResultExt};
 use crate::output::timestamp::Timestamp;
 use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
@@ -9,7 +10,7 @@ use gumdrop::{Options, ParsingStyle};
 use std::io::Read;
 use std::process::{Command, Stdio};
 
-pub type Result<T> = std::result::Result<T, error::Error>;
+pub type Result<T> = std::result::Result<T, error::ErrorWithContext>;
 
 #[derive(Debug, Options)]
 struct ProgramOptions {
@@ -59,13 +60,13 @@ fn loop_input<R: Read>(input: &mut R, output_options: output::Options) -> Result
             Ok(token) => {
                 printer
                     .print(&token)
-                    .map_err(|e| error::Error::wrap("Error writing to stdout", Box::new(e)))?;
+                    .error_context("Error writing to stdout")?;
                 if token == Token::EndOfFile {
                     break;
                 }
             }
             Err(error) => {
-                return Err(error::Error::wrap("Error reading input", Box::new(error)));
+                return Err(ErrorWithContext::wrap("Error reading input", error));
             }
         }
     }
@@ -85,7 +86,7 @@ fn loop_command_output(
         .args(&command_and_args[1..])
         .stdout(Stdio::piped())
         .spawn()
-        .map_err(|e| error::Error::wrap("Failed to execute command", Box::new(e)))?;
+        .error_context("Failed to execute command")?;
 
     let mut child_out = child_process
         .stdout
