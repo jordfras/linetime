@@ -195,12 +195,13 @@ fn main() {
         }
 
         let output_options = output_options(&options);
-
-        if let Err(error) = if options.command.is_empty() {
+        let result = if options.command.is_empty() {
             loop_stdin(output_options)
         } else {
             loop_command_output(options.command, output_options)
-        } {
+        };
+
+        if let Err(error) = result {
             eprintln!("{error}");
             std::process::exit(1);
         }
