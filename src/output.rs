@@ -20,8 +20,8 @@ pub struct Options {
     pub flush_all: bool,
 }
 
-pub struct Printer<'a, W: Write> {
-    stream: &'a mut W,
+pub struct Printer<'a> {
+    stream: &'a mut dyn Write,
     options: Options,
 
     timestamp: Timestamp,
@@ -29,8 +29,8 @@ pub struct Printer<'a, W: Write> {
     break_tokens: VecDeque<Token>,
 }
 
-impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(stream: &'a mut W, timestamp: Timestamp, options: Options) -> Self {
+impl<'a> Printer<'a> {
+    pub fn new(stream: &'a mut dyn Write, timestamp: Timestamp, options: Options) -> Self {
         Self {
             stream,
             options,
@@ -185,7 +185,7 @@ mod tests {
         };
     }
 
-    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_, Vec<u8>> {
+    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_> {
         Printer::new(
             stream,
             Timestamp::new(),

@@ -50,7 +50,7 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn loop_input<R: Read>(input: &mut R, output_options: output::Options) -> Result<()> {
+fn loop_input(input: &mut dyn Read, output_options: output::Options) -> Result<()> {
     let mut tokenizer = SerialTokenizer::new(input);
     let mut stdout = std::io::stdout().lock();
     let mut printer = Printer::new(&mut stdout, Timestamp::new(), output_options);

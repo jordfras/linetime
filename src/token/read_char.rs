@@ -1,7 +1,7 @@
 use std::io::Read;
 
 /// Reads a character, if EOF is reached None is returned
-pub fn read_char(stream: &mut impl Read) -> Result<Option<char>, std::io::Error> {
+pub fn read_char(stream: &mut dyn Read) -> Result<Option<char>, std::io::Error> {
     let mut bytes: [u8; 4] = [0, 0, 0, 0];
     for i in 0..4 {
         let x = &mut bytes[i..(i + 1)];
