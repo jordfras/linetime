@@ -4,10 +4,13 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Duration;
 
-mod timestamp;
+pub mod timestamp;
 use crate::output::timestamp::Timestamp;
 
+#[derive(Clone)]
 pub struct Options {
+    /// Prefix added to start of each line together with a timestamp
+    pub prefix: String,
     /// Show control characters as unicode symbols
     pub show_control: bool,
     /// Show handled escape sequences as string with unciode symbol for the escape character
@@ -18,8 +21,8 @@ pub struct Options {
     pub flush_all: bool,
 }
 
-pub struct Printer<'a, W: Write> {
-    stream: &'a mut W,
+pub struct Printer<'a> {
+    stream: &'a mut dyn Write,
     options: Options,
 
     timestamp: Timestamp,
@@ -27,12 +30,12 @@ pub struct Printer<'a, W: Write> {
     break_tokens: VecDeque<Token>,
 }
 
-impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(stream: &'a mut W, options: Options) -> Self {
+impl<'a> Printer<'a> {
+    pub fn new(stream: &'a mut dyn Write, timestamp: Timestamp, options: Options) -> Self {
         Self {
             stream,
             options,
-            timestamp: Timestamp::new(),
+            timestamp,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -137,6 +140,9 @@ impl<'a, W: Write> Printer<'a, W> {
     fn timestamp(&mut self) -> Result<(), std::io::Error> {
         let t = self.timestamp.get();
         self.print_str(format(t).as_str())?;
+        if !self.options.prefix.is_empty() {
+            self.print_str(format!(" {}", self.options.prefix).as_str())?;
+        }
         self.print_str(": ")?;
         self.start_of_line = false;
         Ok(())
@@ -180,10 +186,12 @@ mod tests {
         };
     }
 
-    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_, Vec<u8>> {
+    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_> {
         Printer::new(
             stream,
+            Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: true,
                 show_escape: true,
                 dump_tokens: false,
@@ -390,7 +398,9 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
+            Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: false,
                 show_escape: true,
                 dump_tokens: false,
@@ -411,7 +421,9 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
+            Timestamp::new(),
             Options {
+                prefix: String::new(),
                 show_control: true,
                 show_escape: false,
                 dump_tokens: false,
@@ -430,5 +442,27 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000: A");
+    }
+
+    #[test]
+    fn prefix_should_be_added_with_timestamp() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Timestamp::new(),
+            Options {
+                prefix: "prefix".to_string(),
+                show_control: false,
+                show_escape: false,
+                dump_tokens: false,
+                flush_all: false,
+            },
+        );
+
+        printer.timestamp.expect_get(Duration::from_secs(3));
+        printer.print(&Token::Char('A')).unwrap();
+
+        printer.timestamp.expect_empty();
+        assert_printed!(stream, "00:03.000 prefix: A");
     }
 }

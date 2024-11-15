@@ -4,6 +4,7 @@ use std::time::Duration;
 #[cfg(not(test))]
 use std::time::SystemTime;
 
+#[derive(Clone)]
 pub struct Timestamp {
     #[cfg(not(test))]
     start_time: SystemTime,

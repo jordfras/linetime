@@ -34,14 +34,14 @@ impl Token {
 /// detect escaoe sequences before a newline (where stdout is usually flushed). Escape sequences
 /// are used to overwrite the same line several times but this tool wants to detect this and
 /// show all output,
-pub struct SerialTokenizer<'a, R: Read> {
-    stream: &'a mut R,
+pub struct SerialTokenizer<'a> {
+    stream: &'a mut dyn Read,
     /// A buffer to hold characters while detecting ANSI escape sequences
     escape_buf: String,
 }
 
-impl<'a, R: Read> SerialTokenizer<'a, R> {
-    pub fn new(stream: &'a mut R) -> Self {
+impl<'a> SerialTokenizer<'a> {
+    pub fn new(stream: &'a mut dyn Read) -> Self {
         Self {
             stream,
             escape_buf: String::with_capacity(32),
