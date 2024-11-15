@@ -3,12 +3,14 @@ mod output;
 mod token;
 
 use crate::error::{ErrorWithContext, ResultExt};
+use crate::output::buffered::LineWriteDecorator;
 use crate::output::timestamp::Timestamp;
 use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 pub type Result<T> = std::result::Result<T, error::ErrorWithContext>;
@@ -94,6 +96,7 @@ fn loop_in_thread<R: Read + Send + 'static>(
     mut child_out: R,
     output_type: OutputStream,
     timestamp: Timestamp,
+    output_mutex: Arc<Mutex<()>>,
     mut output_options: output::Options,
 ) -> JoinHandle<Result<()>> {
     output_options.prefix = if output_type == OutputStream::StdOut {
@@ -107,7 +110,12 @@ fn loop_in_thread<R: Read + Send + 'static>(
         } else {
             &mut std::io::stderr()
         };
-        loop_input(&mut child_out, output_stream, timestamp, output_options)
+        loop_input(
+            &mut child_out,
+            &mut LineWriteDecorator::new(output_stream, output_mutex),
+            timestamp,
+            output_options,
+        )
     })
 }
 
@@ -124,6 +132,8 @@ fn loop_command_output(
         .spawn()
         .error_context("Failed to execute command")?;
 
+    // Mutex to ensure not writing lines to stdout and stderr at the same time
+    let output_mutex = Arc::new(Mutex::new(()));
     let thread_out = loop_in_thread(
         child_process
             .stdout
@@ -131,6 +141,7 @@ fn loop_command_output(
             .expect("Command stdout expected to be piped"),
         OutputStream::StdOut,
         timestamp.clone(),
+        output_mutex.clone(),
         output_options.clone(),
     );
 
@@ -141,6 +152,7 @@ fn loop_command_output(
             .expect("Command stderr expected to be piped"),
         OutputStream::StdErr,
         timestamp,
+        output_mutex,
         output_options,
     );
 
