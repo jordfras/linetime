@@ -7,8 +7,9 @@ use crate::output::timestamp::Timestamp;
 use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::thread::{self, JoinHandle};
 
 pub type Result<T> = std::result::Result<T, error::ErrorWithContext>;
 
@@ -50,10 +51,14 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn loop_input(input: &mut dyn Read, output_options: output::Options) -> Result<()> {
-    let mut tokenizer = SerialTokenizer::new(input);
-    let mut stdout = std::io::stdout().lock();
-    let mut printer = Printer::new(&mut stdout, Timestamp::new(), output_options);
+fn loop_input(
+    input_stream: &mut dyn Read,
+    output_stream: &mut dyn Write,
+    timestamp: Timestamp,
+    output_options: output::Options,
+) -> Result<()> {
+    let mut tokenizer = SerialTokenizer::new(input_stream);
+    let mut printer = Printer::new(output_stream, timestamp, output_options);
 
     loop {
         match tokenizer.next() {
@@ -75,32 +80,86 @@ fn loop_input(input: &mut dyn Read, output_options: output::Options) -> Result<(
 
 fn loop_stdin(output_options: output::Options) -> Result<()> {
     let mut stdin = std::io::stdin().lock();
-    loop_input(&mut stdin, output_options)
+    let mut stdout = std::io::stdout().lock();
+    loop_input(&mut stdin, &mut stdout, Timestamp::new(), output_options)
+}
+
+#[derive(PartialEq)]
+enum OutputStream {
+    StdOut,
+    StdErr,
+}
+
+fn loop_in_thread<R: Read + Send + 'static>(
+    mut child_out: R,
+    output_type: OutputStream,
+    timestamp: Timestamp,
+    mut output_options: output::Options,
+) -> JoinHandle<Result<()>> {
+    output_options.prefix = if output_type == OutputStream::StdOut {
+        "stdout".to_string()
+    } else {
+        "stderr".to_string()
+    };
+    thread::spawn(move || {
+        let output_stream: &mut dyn Write = if output_type == OutputStream::StdOut {
+            &mut std::io::stdout()
+        } else {
+            &mut std::io::stderr()
+        };
+        loop_input(&mut child_out, output_stream, timestamp, output_options)
+    })
 }
 
 fn loop_command_output(
     command_and_args: Vec<String>,
     output_options: output::Options,
 ) -> Result<()> {
+    // Create one instance that can be clones to ensure starting with same reference time
+    let timestamp = Timestamp::new();
     let mut child_process = Command::new(command_and_args[0].as_str())
         .args(&command_and_args[1..])
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .error_context("Failed to execute command")?;
 
-    let mut child_out = child_process
-        .stdout
-        .take()
-        .expect("Output expected to be piped");
-    loop_input(&mut child_out, output_options)?;
+    let thread_out = loop_in_thread(
+        child_process
+            .stdout
+            .take()
+            .expect("Command stdout expected to be piped"),
+        OutputStream::StdOut,
+        timestamp.clone(),
+        output_options.clone(),
+    );
+
+    let thread_err = loop_in_thread(
+        child_process
+            .stderr
+            .take()
+            .expect("Command stderr expected to be piped"),
+        OutputStream::StdErr,
+        timestamp,
+        output_options,
+    );
 
     let status = child_process.wait().expect("Command expected to run");
+
+    thread_out
+        .join()
+        .expect("Thread reading stdout unexpectedly panicked")?;
+    thread_err
+        .join()
+        .expect("Thread reading stderr unexpectedly panicked")?;
+
     if !status.success() {
         if let Some(code) = status.code() {
-            println!("Command exited with {code}");
+            eprintln!("Command exited with {code}");
+            // Exit with same code as underlying program
             std::process::exit(code);
         } else {
-            println!("Command terminated by signal");
+            eprintln!("Command terminated by signal");
         }
     }
     Ok(())

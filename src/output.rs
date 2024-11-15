@@ -7,6 +7,7 @@ use std::time::Duration;
 pub mod timestamp;
 use crate::output::timestamp::Timestamp;
 
+#[derive(Clone)]
 pub struct Options {
     /// Prefix added to start of each line together with a timestamp
     pub prefix: String,

@@ -4,11 +4,14 @@ use std::fmt;
 #[derive(Debug)]
 pub struct ErrorWithContext {
     context: String,
-    cause: Box<dyn std::error::Error>,
+    cause: Box<dyn std::error::Error + Send>,
 }
 
 impl ErrorWithContext {
-    pub fn wrap<E: std::error::Error + 'static>(context: impl Into<String>, cause: E) -> Self {
+    pub fn wrap<E: std::error::Error + Send + 'static>(
+        context: impl Into<String>,
+        cause: E,
+    ) -> Self {
         Self {
             context: context.into(),
             cause: Box::new(cause),
@@ -35,8 +38,8 @@ pub trait ResultExt<T> {
 }
 
 /// Implement `ResultExt` for any error implementing `std::error::Error` trait
-impl<T, E: std::error::Error + 'static> ResultExt<T> for Result<T, E> {
+impl<T, E: std::error::Error + Send + 'static> ResultExt<T> for Result<T, E> {
     fn error_context(self, context: impl Into<String>) -> Result<T, ErrorWithContext> {
-        self.map_err(|error| ErrorWithContext::wrap(context, Box::new(error)))
+        self.map_err(|error| ErrorWithContext::wrap(context, error))
     }
 }
