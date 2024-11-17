@@ -4,8 +4,10 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Duration;
 
+pub mod buffered;
 pub mod timestamp;
-use crate::output::timestamp::Timestamp;
+
+use self::timestamp::Timestamp;
 
 #[derive(Clone)]
 pub struct Options {
