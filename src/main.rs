@@ -41,6 +41,29 @@ struct ProgramOptions {
     command: Vec<String>,
 }
 
+impl From<&ProgramOptions> for output::Options {
+    #[cfg(debug_assertions)]
+    fn from(options: &ProgramOptions) -> Self {
+        Self {
+            prefix: String::new(),
+            show_control: options.show_control,
+            show_escape: options.show_escape,
+            dump_tokens: options.dump_tokens,
+            flush_all: options.flush_all,
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    fn from(options: &ProgramOptions) -> Self {
+        Self {
+            prefix: String::new(),
+            show_control: options.show_control,
+            show_escape: options.show_escape,
+            dump_tokens: false,
+            flush_all: false,
+        }
+    }
+}
+
 fn show_help(program_name: &str) {
     println!("Usage: {program_name} [option ...] command [argument ...]");
     println!("       {program_name} [option ...] -- command [argument ...]");
@@ -120,10 +143,10 @@ fn loop_in_thread<R: Read + Send + 'static>(
 }
 
 fn loop_command_output(
-    command_and_args: Vec<String>,
+    command_and_args: &Vec<String>,
     output_options: output::Options,
 ) -> Result<()> {
-    // Create one instance that can be clones to ensure starting with same reference time
+    // Create one instance that can be cloned to ensure starting with same reference time
     let timestamp = Timestamp::new();
     let mut child_process = Command::new(command_and_args[0].as_str())
         .args(&command_and_args[1..])
@@ -177,27 +200,6 @@ fn loop_command_output(
     Ok(())
 }
 
-#[cfg(debug_assertions)]
-fn output_options(options: &ProgramOptions) -> output::Options {
-    output::Options {
-        prefix: String::new(),
-        show_control: options.show_control,
-        show_escape: options.show_escape,
-        dump_tokens: options.dump_tokens,
-        flush_all: options.flush_all,
-    }
-}
-#[cfg(not(debug_assertions))]
-fn output_options(options: &ProgramOptions) -> output::Options {
-    output::Options {
-        prefix: String::new(),
-        show_control: options.show_control,
-        show_escape: options.show_escape,
-        dump_tokens: false,
-        flush_all: false,
-    }
-}
-
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
     if let Ok(options) = ProgramOptions::parse_args(&args[1..], ParsingStyle::StopAtFirstFree) {
@@ -206,11 +208,10 @@ fn main() {
             return;
         }
 
-        let output_options = output_options(&options);
         let result = if options.command.is_empty() {
-            loop_stdin(output_options)
+            loop_stdin((&options).into())
         } else {
-            loop_command_output(options.command, output_options)
+            loop_command_output(&options.command, (&options).into())
         };
 
         if let Err(error) = result {
