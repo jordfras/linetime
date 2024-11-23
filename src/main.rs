@@ -1,19 +1,17 @@
+mod command;
 mod error;
 mod output;
 mod token;
 
-use crate::error::{ErrorWithContext, ResultExt};
+use crate::error::{ErrorWithContext, Result, ResultExt};
 use crate::output::buffered::LineWriteDecorator;
 use crate::output::timestamp::Timestamp;
 use crate::output::Printer;
 use crate::token::{SerialTokenizer, Token};
 use gumdrop::{Options, ParsingStyle};
 use std::io::{Read, Write};
-use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-
-pub type Result<T> = std::result::Result<T, error::ErrorWithContext>;
 
 #[derive(Debug, Options)]
 struct ProgramOptions {
@@ -148,20 +146,13 @@ fn loop_command_output(
 ) -> Result<()> {
     // Create one instance that can be cloned to ensure starting with same reference time
     let timestamp = Timestamp::new();
-    let mut child_process = Command::new(command_and_args[0].as_str())
-        .args(&command_and_args[1..])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .error_context("Failed to execute command")?;
+    let mut command = command::Runner::new(command_and_args);
+    command.spawn()?;
 
     // Mutex to ensure not writing lines to stdout and stderr at the same time
     let output_mutex = Arc::new(Mutex::new(()));
     let thread_out = loop_in_thread(
-        child_process
-            .stdout
-            .take()
-            .expect("Command stdout expected to be piped"),
+        command.stdout(),
         OutputStream::StdOut,
         timestamp.clone(),
         output_mutex.clone(),
@@ -169,17 +160,14 @@ fn loop_command_output(
     );
 
     let thread_err = loop_in_thread(
-        child_process
-            .stderr
-            .take()
-            .expect("Command stderr expected to be piped"),
+        command.stderr(),
         OutputStream::StdErr,
         timestamp,
         output_mutex,
         output_options,
     );
 
-    let status = child_process.wait().expect("Command expected to run");
+    command.wait();
 
     thread_out
         .join()
@@ -188,16 +176,7 @@ fn loop_command_output(
         .join()
         .expect("Thread reading stderr unexpectedly panicked")?;
 
-    if !status.success() {
-        if let Some(code) = status.code() {
-            eprintln!("Command exited with {code}");
-            // Exit with same code as underlying program
-            std::process::exit(code);
-        } else {
-            eprintln!("Command terminated by signal");
-        }
-    }
-    Ok(())
+    command.exit_if_failed()
 }
 
 fn main() {
