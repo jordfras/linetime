@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex};
 
 /// A Write decorator that buffers lines and then writes the output to the inner Write
 pub struct LineWriteDecorator<'a> {
-    inner: &'a mut dyn Write,
+    inner: &'a mut (dyn Write + Send),
     buffer: Vec<u8>,
     write_mutex: Arc<Mutex<()>>,
 }
 
 impl<'a> LineWriteDecorator<'a> {
-    pub fn new(inner: &'a mut dyn Write, write_mutex: Arc<Mutex<()>>) -> Self {
+    pub fn new(inner: &'a mut (dyn Write + Send), write_mutex: Arc<Mutex<()>>) -> Self {
         Self {
             inner,
             buffer: Vec::with_capacity(256),
