@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::main_loop::MainLoop;
 use crate::output::buffered::LineWriteDecorator;
 use gumdrop::{Options, ParsingStyle};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Options)]
@@ -17,6 +18,9 @@ struct ProgramOptions {
 
     #[options(short = "e", help = "show ANSI escape sequences")]
     show_escape: bool,
+
+    #[options(short = "l", help = "disable line buffering when executing command")]
+    no_line_buffering: bool,
 
     #[options(help = "print help message")]
     help: bool,
@@ -65,8 +69,10 @@ fn show_help(program_name: &str) {
     println!("       command [argument] | {program_name} [option ...]");
     println!("       command [argument] 2>&1 | {program_name} [option ...]");
     println!();
-    println!("Reads from stdin and prefixes each line with a timestamp.");
-    println!("Unfolding is attempted for input trying to ovewrite the current line.");
+    println!("Reads from stdin or executes a command and grabs its output. Each line is");
+    println!("prefixed with a timestamp. Unfolding is attempted when escape sequences ");
+    println!("overwrite the current line. When the command is executed, output is buffered");
+    println!("to ensure lines written to stdout and stderr are not interleaved.");
     println!();
     println!("{}", ProgramOptions::usage());
 }
@@ -86,6 +92,16 @@ fn run_main_loop(options: ProgramOptions) -> Result<()> {
         let mut stderr = std::io::stderr();
         let mut wrapped_stdout = LineWriteDecorator::new(&mut stdout, output_mutex.clone());
         let mut wrapped_stderr = LineWriteDecorator::new(&mut stderr, output_mutex);
+        let maybe_wrapped_stdout: &mut (dyn Write + Send) = if options.no_line_buffering {
+            &mut stdout
+        } else {
+            &mut wrapped_stdout
+        };
+        let maybe_wrapped_stderr: &mut (dyn Write + Send) = if options.no_line_buffering {
+            &mut stderr
+        } else {
+            &mut wrapped_stderr
+        };
 
         let mut command = command::Runner::new(&options.command);
         command.spawn()?;
@@ -93,8 +109,8 @@ fn run_main_loop(options: ProgramOptions) -> Result<()> {
         let mut command_stderr = command.stderr();
 
         let mut main_loop = MainLoop::new((&options).into());
-        main_loop.add_stream(&mut command_stdout, &mut wrapped_stdout, "stdout");
-        main_loop.add_stream(&mut command_stderr, &mut wrapped_stderr, "stderr");
+        main_loop.add_stream(&mut command_stdout, maybe_wrapped_stdout, "stdout");
+        main_loop.add_stream(&mut command_stderr, maybe_wrapped_stderr, "stderr");
 
         main_loop.run()?;
         command.wait();
