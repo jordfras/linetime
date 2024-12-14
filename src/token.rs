@@ -91,7 +91,6 @@ impl<'a> SerialTokenizer<'a> {
     fn take_char_from_buffer(&mut self) -> Token {
         assert!(!self.escape_buf.is_empty());
         let c = self.escape_buf.chars().next().unwrap();
-        // TODO: Can we use some other type to avoid copying strings?
         self.escape_buf.remove(0);
         Token::from_single_char(c)
     }
