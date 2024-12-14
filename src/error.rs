@@ -7,6 +7,9 @@ pub struct ErrorWithContext {
     cause: Box<dyn std::error::Error + Send>,
 }
 
+/// Convenience short name
+pub type Result<T> = std::result::Result<T, ErrorWithContext>;
+
 impl ErrorWithContext {
     pub fn wrap<E: std::error::Error + Send + 'static>(
         context: impl Into<String>,
@@ -34,12 +37,12 @@ impl std::error::Error for ErrorWithContext {
 
 /// Extension trait to `Result` to wrap any contained error in an `ErrorWithContext`
 pub trait ResultExt<T> {
-    fn error_context(self, context: impl Into<String>) -> Result<T, ErrorWithContext>;
+    fn error_context(self, context: impl Into<String>) -> Result<T>;
 }
 
 /// Implement `ResultExt` for any error implementing `std::error::Error` trait
-impl<T, E: std::error::Error + Send + 'static> ResultExt<T> for Result<T, E> {
-    fn error_context(self, context: impl Into<String>) -> Result<T, ErrorWithContext> {
+impl<T, E: std::error::Error + Send + 'static> ResultExt<T> for std::result::Result<T, E> {
+    fn error_context(self, context: impl Into<String>) -> Result<T> {
         self.map_err(|error| ErrorWithContext::wrap(context, error))
     }
 }

@@ -24,7 +24,7 @@ pub struct Options {
 }
 
 pub struct Printer<'a> {
-    stream: &'a mut dyn Write,
+    stream: &'a mut (dyn Write + Send),
     options: Options,
 
     timestamp: Timestamp,
@@ -33,7 +33,7 @@ pub struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
-    pub fn new(stream: &'a mut dyn Write, timestamp: Timestamp, options: Options) -> Self {
+    pub fn new(stream: &'a mut (dyn Write + Send), timestamp: Timestamp, options: Options) -> Self {
         Self {
             stream,
             options,

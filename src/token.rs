@@ -35,13 +35,13 @@ impl Token {
 /// are used to overwrite the same line several times but this tool wants to detect this and
 /// show all output,
 pub struct SerialTokenizer<'a> {
-    stream: &'a mut dyn Read,
+    stream: &'a mut (dyn Read + Send),
     /// A buffer to hold characters while detecting ANSI escape sequences
     escape_buf: String,
 }
 
 impl<'a> SerialTokenizer<'a> {
-    pub fn new(stream: &'a mut dyn Read) -> Self {
+    pub fn new(stream: &'a mut (dyn Read + Send)) -> Self {
         Self {
             stream,
             escape_buf: String::with_capacity(32),
