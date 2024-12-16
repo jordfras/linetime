@@ -13,6 +13,9 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Options)]
 struct ProgramOptions {
+    #[options(short = "d", help = "show delta time from previous line to stream")]
+    show_delta: bool,
+
     #[options(short = "c", help = "show control characters as unicode symbols")]
     show_control: bool,
 
@@ -25,7 +28,7 @@ struct ProgramOptions {
     #[options(help = "print help message")]
     help: bool,
 
-    #[options(short = "d", help = "dump all tokens to stderr")]
+    #[options(short = "t", help = "dump all tokens to stderr")]
     #[cfg(debug_assertions)]
     dump_tokens: bool,
 
@@ -44,6 +47,7 @@ impl From<&ProgramOptions> for output::Options {
     #[cfg(debug_assertions)]
     fn from(options: &ProgramOptions) -> Self {
         Self {
+            show_delta: options.show_delta,
             prefix: String::new(),
             show_control: options.show_control,
             show_escape: options.show_escape,
@@ -54,6 +58,7 @@ impl From<&ProgramOptions> for output::Options {
     #[cfg(not(debug_assertions))]
     fn from(options: &ProgramOptions) -> Self {
         Self {
+            show_delta: options.show_delta,
             prefix: String::new(),
             show_control: options.show_control,
             show_escape: options.show_escape,
