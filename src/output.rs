@@ -11,6 +11,8 @@ use self::timestamp::Timestamp;
 
 #[derive(Clone)]
 pub struct Options {
+    /// Show delta time since previous line
+    pub show_delta: bool,
     /// Prefix added to start of each line together with a timestamp
     pub prefix: String,
     /// Show control characters as unicode symbols
@@ -28,6 +30,7 @@ pub struct Printer<'a> {
     options: Options,
 
     timestamp: Timestamp,
+    previous_time: Option<Duration>,
     start_of_line: bool,
     break_tokens: VecDeque<Token>,
 }
@@ -38,6 +41,7 @@ impl<'a> Printer<'a> {
             stream,
             options,
             timestamp,
+            previous_time: None,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -142,10 +146,22 @@ impl<'a> Printer<'a> {
     fn timestamp(&mut self) -> Result<(), std::io::Error> {
         let t = self.timestamp.get();
         self.print_str(format(t).as_str())?;
+        if self.options.show_delta {
+            self.print_str(
+                if let Some(previous) = self.previous_time {
+                    let delta = t - previous;
+                    format!(" ({})", format(delta))
+                } else {
+                    "            ".to_string()
+                }
+                .as_str(),
+            )?;
+        }
         if !self.options.prefix.is_empty() {
             self.print_str(format!(" {}", self.options.prefix).as_str())?;
         }
         self.print_str(": ")?;
+        self.previous_time = Some(t);
         self.start_of_line = false;
         Ok(())
     }
@@ -188,11 +204,12 @@ mod tests {
         };
     }
 
-    fn printer_showing_all(stream: &'_ mut Vec<u8>) -> Printer<'_> {
+    fn printer_showing_control_and_escape(stream: &'_ mut Vec<u8>) -> Printer<'_> {
         Printer::new(
             stream,
             Timestamp::new(),
             Options {
+                show_delta: false,
                 prefix: String::new(),
                 show_control: true,
                 show_escape: true,
@@ -205,7 +222,7 @@ mod tests {
     #[test]
     fn timestamp_is_added_at_beginning_of_lines() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -217,7 +234,7 @@ mod tests {
     #[test]
     fn timestamp_is_requested_for_first_token_on_line() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -234,7 +251,7 @@ mod tests {
     #[test]
     fn overwriting_line_with_cr_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -250,7 +267,7 @@ mod tests {
     #[test]
     fn cr_lf_causes_only_one_newline_but_cr_is_forwarded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -267,7 +284,7 @@ mod tests {
     #[test]
     fn multiples_new_lines_are_handled() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::CarriageReturn).unwrap();
@@ -296,7 +313,7 @@ mod tests {
     #[test]
     fn cr_escape_erase_to_end_of_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -318,7 +335,7 @@ mod tests {
     #[test]
     fn escape_erase_entire_line_is_unfolded() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -339,7 +356,7 @@ mod tests {
     #[test]
     fn escape_coloring_is_unchanged() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -355,7 +372,7 @@ mod tests {
     #[test]
     fn end_of_file_with_newline_before() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -370,7 +387,7 @@ mod tests {
     #[test]
     fn end_of_file_with_empty_line_before() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::LineFeed).unwrap();
@@ -384,7 +401,7 @@ mod tests {
     #[test]
     fn end_of_file_without_newline_before() {
         let mut stream = Vec::<u8>::new();
-        let mut printer = printer_showing_all(&mut stream);
+        let mut printer = printer_showing_control_and_escape(&mut stream);
 
         printer.timestamp.expect_get(Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
@@ -402,6 +419,7 @@ mod tests {
             &mut stream,
             Timestamp::new(),
             Options {
+                show_delta: false,
                 prefix: String::new(),
                 show_control: false,
                 show_escape: true,
@@ -425,6 +443,7 @@ mod tests {
             &mut stream,
             Timestamp::new(),
             Options {
+                show_delta: false,
                 prefix: String::new(),
                 show_control: true,
                 show_escape: false,
@@ -453,6 +472,7 @@ mod tests {
             &mut stream,
             Timestamp::new(),
             Options {
+                show_delta: false,
                 prefix: "prefix".to_string(),
                 show_control: false,
                 show_escape: false,
@@ -466,5 +486,35 @@ mod tests {
 
         printer.timestamp.expect_empty();
         assert_printed!(stream, "00:03.000 prefix: A");
+    }
+
+    #[test]
+    fn delta_should_be_added_with_timestamp() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Timestamp::new(),
+            Options {
+                show_delta: true,
+                prefix: "prefix".to_string(),
+                show_control: false,
+                show_escape: false,
+                dump_tokens: false,
+                flush_all: false,
+            },
+        );
+
+        printer.timestamp.expect_get(Duration::from_millis(3000));
+        printer.timestamp.expect_get(Duration::from_millis(3100));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+        printer.print(&Token::Char('B')).unwrap();
+
+        //printer.timestamp.expect_empty();
+        assert_printed!(
+            stream,
+            "00:03.000             prefix: A\n",
+            "00:03.100 (00:00.100) prefix: B"
+        );
     }
 }
