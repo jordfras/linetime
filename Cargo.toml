@@ -7,8 +7,17 @@ authors = ["Thomas Johannesson"]
 
 [dependencies]
 gumdrop = "0.8.1"
+regex = { version = "1.11.1", default-features = false, features = ["std", "perf"] }
 
-[dependencies.regex]
-version = "1.11.1"
-default-features = false
-features = ["std", "perf"]
+[dev-dependencies]
+actix-web = "4.9.0"
+serde = { version = "1.0.216", features = ["derive"] }
+tokio = "1.42.0"
+
+[[test]]
+# Dummy command configured as an integration test binary without harness.
+# Unfortunately it will be executed by cargo test, but it is better than having
+# it as an additional binary in src/bin/ since the extra dependencies will grow
+# the main binary with ~0.5 MiB.
+name = "marionette"
+harness = false
