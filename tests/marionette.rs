@@ -2,7 +2,6 @@ use actix_web::http::header::ContentType;
 use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::time::Duration;
 
 #[actix_web::main]
 async fn main() {
@@ -74,8 +73,7 @@ async fn args() -> HttpResponse {
 }
 
 async fn exit(parameters: web::Form<ExitParameters>) -> HttpResponse {
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(100));
+    tokio::task::spawn(async move {
         std::process::exit(parameters.exit_code);
     });
     HttpResponse::Ok()

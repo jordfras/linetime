@@ -12,7 +12,7 @@ regex = { version = "1.11.1", default-features = false, features = ["std", "perf
 [dev-dependencies]
 actix-web = "4.9.0"
 serde = { version = "1.0.216", features = ["derive"] }
-serde_json = "1.0.133"
+tokio = "1.42.0"
 
 [[test]]
 # Dummy command configured as an integration test binary without harness.
