@@ -1,36 +1,6 @@
+use super::paths::MARIONETTE_PATH;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::sync::LazyLock;
-
-static PROGRAM_PATH: LazyLock<PathBuf> = LazyLock::<PathBuf>::new(|| {
-    let mut cargo = std::process::Command::new("cargo")
-        .args(vec!["test", "--no-run", "--message-format", "json"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Cargo should provide info about tests");
-    let reader = std::io::BufReader::new(cargo.stdout.take().unwrap());
-
-    let mut result = None;
-    for message in cargo_metadata::Message::parse_stream(reader) {
-        if let cargo_metadata::Message::CompilerArtifact(artifact) = message.unwrap() {
-            if artifact.target.name == "marionette" {
-                result = Some(
-                    artifact
-                        .executable
-                        .expect("marionette artifact should have an executable")
-                        .into(),
-                );
-            }
-        }
-    }
-
-    if cargo.wait().is_err() {
-        panic!("Cargo failed!");
-    }
-    result.expect("No marionette artifact provided by cargo")
-});
 
 /// Picks a port number based on thread id to avoid using same port in tests running in parallel
 pub fn port() -> u16 {
@@ -47,7 +17,7 @@ pub fn port() -> u16 {
 /// Creates argument vector for the marionette. The first argument is always the port number to use.
 pub fn app_path_and_args(additional_app_args: Vec<&str>) -> Vec<std::ffi::OsString> {
     let mut result = Vec::with_capacity(2 + additional_app_args.len());
-    result.push(PROGRAM_PATH.clone().into_os_string());
+    result.push(MARIONETTE_PATH.clone().into_os_string());
     result.push(port().to_string().into());
     for arg in additional_app_args {
         result.push(arg.into());

@@ -1,4 +1,5 @@
 mod marionette_control;
+mod paths;
 mod program_under_test;
 
 use program_under_test::Linetime;

@@ -1,37 +1,8 @@
+use super::paths::LINETIME_PATH;
 use regex::Regex;
 use std::io::{Read, Write};
-use std::path::PathBuf;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
-use std::sync::LazyLock;
 use std::time::Duration;
-
-static PROGRAM_PATH: LazyLock<PathBuf> = LazyLock::<PathBuf>::new(|| {
-    let mut cargo = std::process::Command::new("cargo")
-        .args(vec!["test", "--no-run", "--message-format", "json"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Cargo should provide info about tests");
-    let reader = std::io::BufReader::new(cargo.stdout.take().unwrap());
-
-    let mut result = None;
-    for message in cargo_metadata::Message::parse_stream(reader) {
-        if let cargo_metadata::Message::CompilerArtifact(artifact) = message.unwrap() {
-            if artifact.target.name == "linetime" && !artifact.profile.test {
-                result = Some(
-                    artifact
-                        .executable
-                        .expect("linetime artifact should have an executable")
-                        .into(),
-                );
-            }
-        }
-    }
-
-    if cargo.wait().is_err() {
-        panic!("Cargo failed!");
-    }
-    result.expect("No linetime artifact provided by cargo")
-});
 
 /// A wrapper to run the linetime program with some arguments. It provides functions to expect
 /// output on stdout and stderr. These functions are _blocking_, i.e., if the amount of
@@ -50,7 +21,7 @@ pub struct Linetime {
 impl Linetime {
     /// Runs linetime with the provided arguments
     pub fn run(args: Vec<std::ffi::OsString>) -> Self {
-        let mut process = std::process::Command::new(PROGRAM_PATH.as_path())
+        let mut process = std::process::Command::new(LINETIME_PATH.as_path())
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
