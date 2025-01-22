@@ -4,61 +4,113 @@ mod program_under_test;
 
 use program_under_test::Linetime;
 
+use std::time::Duration;
+use tokio::time::timeout;
+
+/// Macro that wraps a future returning a result in a timeout and asserts that the future is
+/// succesful and does not timeout
+macro_rules! assert_ok {
+    ( $future:expr ) => {
+        match timeout(Duration::from_secs(3), $future).await {
+            Ok(timeout_result) => match timeout_result {
+                Ok(result) => result,
+                Err(error) => {
+                    panic!(
+                        "Operation '{}' should be successful but it failed with: {}",
+                        stringify!($future),
+                        error
+                    );
+                }
+            },
+            Err(_) => {
+                panic!(
+                    "Operation '{}' should be successful but it timeout out",
+                    stringify!($future),
+                );
+            }
+        }
+    };
+}
+
 /// Expect program to print that end is reached of stdin
-fn expect_input_end(put: &mut Linetime) {
-    put.expect_stdout_timestamp();
-    put.expect_stdout(": ␄\n");
+macro_rules! assert_input_end {
+    ( $put:expr ) => {
+        assert_ok!($put.read_stdout_timestamp());
+        assert_ok!($put.read_stdout(": ␄\n"));
+    };
 }
 
 /// Expect program to print that end is reached of both stdout and stderr of the command executed
 /// by the program
-fn expect_command_output_end(put: &mut Linetime) {
-    put.expect_stdout_timestamp();
-    put.expect_stdout(" stdout: ␄\n");
-    put.expect_stderr_timestamp();
-    put.expect_stderr(" stderr: ␄\n");
+macro_rules! assert_command_output_end {
+    ( $put:expr ) => {
+        assert_ok!($put.read_stdout_timestamp());
+        assert_ok!($put.read_stdout(" stdout: ␄\n"));
+        assert_ok!($put.read_stderr_timestamp());
+        assert_ok!($put.read_stderr(" stderr: ␄\n"));
+    };
 }
 
-#[test]
-fn stdin_is_read_if_no_command_is_executed_by_program() {
+#[tokio::test]
+async fn stdin_is_read_when_no_command_is_executed() {
     let mut put = Linetime::run(vec![]);
 
-    put.write_stdin("hello\n");
-    put.expect_stdout_timestamp();
-    put.expect_stdout(": hello\n");
+    put.write_stdin("hello\n").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(": hello\n"));
 
     put.close_stdin();
-    expect_input_end(&mut put);
+    assert_input_end!(put);
 
-    assert!(put.wait().success());
+    assert!(put.wait().await.success());
 }
 
-#[test]
-fn stdout_from_command_is_read_when_command_is_executed() {
+#[tokio::test]
+async fn stdout_from_command_is_read_when_command_is_executed() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new();
 
-    control.stdout("hello\n");
-    put.expect_stdout_timestamp();
-    put.expect_stdout(" stdout: hello\n");
+    control.stdout("hello\n").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: hello\n"));
 
-    control.exit(0);
-    expect_command_output_end(&mut put);
+    control.exit(0).await;
+    assert_command_output_end!(put);
 
-    assert!(put.wait().success());
+    assert!(put.wait().await.success());
 }
 
-#[test]
-fn stderr_from_command_is_read_when_command_is_executed() {
+#[tokio::test]
+async fn stderr_from_command_is_read_when_command_is_executed() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new();
 
-    control.stderr("hello\n");
-    put.expect_stderr_timestamp();
-    put.expect_stderr(" stderr: hello\n");
+    control.stderr("hello\n").await;
+    assert_ok!(put.read_stderr_timestamp());
+    assert_ok!(put.read_stderr(" stderr: hello\n"));
 
-    control.exit(0);
-    expect_command_output_end(&mut put);
+    control.exit(0).await;
+    assert_command_output_end!(put);
 
-    assert!(put.wait().success());
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
+async fn output_lines_get_ordererd_timestamps() {
+    let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
+    let mut control = marionette_control::Bar::new();
+
+    control.stdout("hello\n").await;
+    let t1 = assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: hello\n"));
+
+    control.stdout("world\n").await;
+    let t2 = assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: world\n"));
+    assert!(t2 >= t1);
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
 }
