@@ -3,7 +3,7 @@ use actix_web::{dev, web, App, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
 use std::{env, io::Write, sync::Mutex};
 
-#[actix_web::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() == 1 {
