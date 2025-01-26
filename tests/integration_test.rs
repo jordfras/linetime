@@ -236,3 +236,17 @@ async fn environment_variables_are_forwarded_to_command() {
 
     assert!(put.wait().await.success());
 }
+
+#[tokio::test]
+async fn stdin_is_ignored_when_command_is_executed() {
+    let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
+    let mut control = marionette_control::Bar::new();
+
+    put.write_stdin("ignored line").await;
+    assert_timeout!(put.read_stdout_timestamp());
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
+}
