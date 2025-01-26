@@ -37,11 +37,20 @@ impl Drop for Linetime {
 impl Linetime {
     /// Runs linetime with the provided arguments
     pub fn run(args: Vec<std::ffi::OsString>) -> Self {
+        Self::run_with_env(args, vec![])
+    }
+
+    /// Runs linetime with the provided arguments and environment variables
+    pub fn run_with_env(
+        args: Vec<std::ffi::OsString>,
+        env_vars: Vec<(std::ffi::OsString, std::ffi::OsString)>,
+    ) -> Self {
         let mut process = tokio::process::Command::new(LINETIME_PATH.as_path())
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .envs(env_vars)
             .spawn()
             .expect("Should be able to run linetime");
         let stdin = Some(process.stdin.take().unwrap());

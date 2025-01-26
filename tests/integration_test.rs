@@ -212,3 +212,27 @@ async fn arguments_are_forwarded_to_command() {
 
     assert!(put.wait().await.success());
 }
+
+#[tokio::test]
+async fn environment_variables_are_forwarded_to_command() {
+    let mut put = Linetime::run_with_env(
+        marionette_control::app_path_and_args(vec![]),
+        vec![("variable".into(), "value".into())],
+    );
+    let mut control = marionette_control::Bar::new();
+
+    assert_eq!(
+        vec![("variable".to_string(), "value".to_string())],
+        control
+            .env()
+            .await
+            .into_iter()
+            .filter(|(var, _)| var == "variable")
+            .collect::<Vec<_>>()
+    );
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
+}
