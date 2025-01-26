@@ -181,3 +181,17 @@ async fn input_from_command_is_buffered_to_print_complete_lines_even_for_stderr(
 
     assert!(put.wait().await.success());
 }
+
+#[tokio::test]
+async fn application_exits_with_same_exit_code_as_command() {
+    let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
+    let mut control = marionette_control::Bar::new();
+
+    control.exit(17).await;
+    assert_command_output_end!(&mut put);
+    assert_ok!(put.read_stderr("Command exited with 17\n"));
+
+    let exit_status = put.wait().await;
+    assert!(!exit_status.success());
+    assert_eq!(Some(17), exit_status.code());
+}
