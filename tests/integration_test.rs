@@ -195,3 +195,20 @@ async fn application_exits_with_same_exit_code_as_command() {
     assert!(!exit_status.success());
     assert_eq!(Some(17), exit_status.code());
 }
+
+#[tokio::test]
+async fn arguments_are_forwarded_to_command() {
+    let mut put = Linetime::run(marionette_control::app_path_and_args(vec![
+        "--option", "value",
+    ]));
+    let mut control = marionette_control::Bar::new();
+
+    let args = control.args().await;
+    // Ignore program name and port argument
+    assert_eq!(vec!["--option", "value"], args[2..]);
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
+}
