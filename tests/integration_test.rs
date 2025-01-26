@@ -32,6 +32,23 @@ macro_rules! assert_ok {
     };
 }
 
+/// Macro that wraps a future in a timeout and asserts that the future likely would block
+/// indefinetely, by testing it with a short timeout
+macro_rules! assert_timeout {
+    ( $future:expr ) => {
+        match timeout(Duration::from_millis(500), $future).await {
+            Ok(timeout_result) => panic!(
+                "Operation '{}' should block but returned with: {:?}",
+                stringify!($future),
+                timeout_result
+            ),
+            Err(_) => {
+                // This is what we expect!
+            }
+        }
+    };
+}
+
 /// Expect program to print that end is reached of stdin
 macro_rules! assert_input_end {
     ( $put:expr ) => {
@@ -49,6 +66,10 @@ macro_rules! assert_command_output_end {
         assert_ok!($put.read_stderr_timestamp());
         assert_ok!($put.read_stderr(" stderr: ␄\n"));
     };
+}
+
+fn to_os(strings: Vec<&str>) -> Vec<std::ffi::OsString> {
+    strings.into_iter().map(|s| s.to_string().into()).collect()
 }
 
 #[tokio::test]
@@ -108,6 +129,52 @@ async fn output_lines_get_ordererd_timestamps() {
     let t2 = assert_ok!(put.read_stdout_timestamp());
     assert_ok!(put.read_stdout(" stdout: world\n"));
     assert!(t2 >= t1);
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
+async fn input_from_stdin_is_not_buffered_to_print_complete_lines_if_flushed() {
+    let mut put = Linetime::run(to_os(vec!["--flush-all"]));
+
+    put.write_stdin("hello").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(": hello"));
+
+    put.write_stdin("world!\n").await;
+    assert_ok!(put.read_stdout("world!\n"));
+
+    put.close_stdin();
+    assert_input_end!(put);
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
+async fn input_from_command_is_buffered_to_print_complete_lines_even_for_stderr() {
+    let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
+    let mut control = marionette_control::Bar::new();
+
+    control.stdout("aaa").await;
+    assert_timeout!(put.read_stdout_timestamp());
+    control.stderr("bbb\n").await;
+    assert_ok!(put.read_stderr_timestamp());
+    assert_ok!(put.read_stderr(" stderr: bbb\n"));
+    control.stdout("ccc\n").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: aaaccc\n"));
+
+    control.stderr("aaa").await;
+    assert_timeout!(put.read_stderr_timestamp());
+    control.stdout("bbb\n").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: bbb\n"));
+    control.stderr("ccc\n").await;
+    assert_ok!(put.read_stderr_timestamp());
+    assert_ok!(put.read_stderr(" stderr: aaaccc\n"));
 
     control.exit(0).await;
     assert_command_output_end!(&mut put);
