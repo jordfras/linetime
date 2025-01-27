@@ -270,3 +270,26 @@ async fn stdin_is_ignored_when_command_is_executed() {
 
     assert!(put.wait().await.success());
 }
+
+#[tokio::test]
+async fn escape_sequence_to_move_cursor_is_swallowed_to_unfold_lines() {
+    let mut put = Linetime::run(vec![]);
+
+    put.write_stdin("hello").await;
+    // ESC[2K = erase entire line
+    put.write_stdin("\x1b[2K").await;
+    // ESC[H = move cursor home
+    put.write_stdin("\x1b[H").await;
+    put.write_stdin("world\n").await;
+
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(": hello\n"));
+    // New line and timestamp, since unfolding instead of printing erase or cursor escape sequences
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(": world\n"));
+
+    put.close_stdin();
+    assert_input_end!(put);
+
+    assert!(put.wait().await.success());
+}
