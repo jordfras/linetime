@@ -137,6 +137,33 @@ async fn output_lines_get_ordererd_timestamps() {
 }
 
 #[tokio::test]
+async fn delta_times_can_be_shown_after_timestamp() {
+    let mut put = Linetime::run(to_os(vec!["--show-delta"]));
+
+    put.write_stdin("hello\n").await;
+    let t1 = assert_ok!(put.read_stdout_timestamp());
+    // Blank space left for first line instead of delta time
+    assert_ok!(put.read_stdout("            : hello\n"));
+
+    put.write_stdin("world\n").await;
+    let t2 = assert_ok!(put.read_stdout_timestamp());
+    let d2 = assert_ok!(put.read_stdout_delta());
+    assert_ok!(put.read_stdout(": world\n"));
+
+    assert!(t2 >= t1);
+    // Allow 1 ms rounding error
+    assert!(t2 - t1 <= d2 + Duration::from_millis(1));
+    assert!(t2 - t1 + Duration::from_millis(1) >= d2);
+
+    put.close_stdin();
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout_delta());
+    assert_ok!(put.read_stdout(": ␄\n"));
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
 async fn input_from_stdin_is_not_buffered_to_print_complete_lines_if_flushed() {
     let mut put = Linetime::run(to_os(vec!["--flush-all"]));
 

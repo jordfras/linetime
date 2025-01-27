@@ -13,6 +13,7 @@ pub struct Linetime {
     stdout: ChildStdout,
     stderr: ChildStderr,
     timestamp_regex: Regex,
+    delta_regex: Regex,
 }
 
 impl Drop for Linetime {
@@ -62,6 +63,7 @@ impl Linetime {
             stdout,
             stderr,
             timestamp_regex: Regex::new("([0-9]+):([0-9]+).([0-9]+)").unwrap(),
+            delta_regex: Regex::new(" \\(([0-9]+):([0-9]+).([0-9]+)\\)").unwrap(),
         }
     }
 
@@ -89,6 +91,11 @@ impl Linetime {
     /// Reads a timestamp from the program's stdout and returns it as a Duration
     pub async fn read_stderr_timestamp(&mut self) -> Result<Duration, std::io::Error> {
         Self::read_timestamp(&mut self.stderr, &self.timestamp_regex, "stderr").await
+    }
+
+    /// Reads a delta time from the program's stdout and returns it as a Duration
+    pub async fn read_stdout_delta(&mut self) -> Result<Duration, std::io::Error> {
+        Self::read_delta(&mut self.stdout, &self.delta_regex, "stdout").await
     }
 
     /// Reads some text from the program's stdout and checks that it matches the expected text,
@@ -172,8 +179,31 @@ impl Linetime {
     {
         let read_text = Self::read(reader, 9, reader_name).await?;
         let Some(captures) = regex.captures(read_text.as_str()) else {
-            // TODO: Return error
-            panic!("Could not find timestamp in linetime {reader_name} text '{read_text}'");
+            return Err(std::io::Error::other(format!(
+                "Could not find timestamp in linetime {reader_name} text '{read_text}'"
+            )));
+        };
+        assert_eq!(4, captures.len());
+        Ok(
+            Duration::from_secs(60 * get_u64(&captures, 1) + get_u64(&captures, 2))
+                + Duration::from_millis(get_u64(&captures, 3)),
+        )
+    }
+
+    async fn read_delta<R>(
+        reader: &mut R,
+        regex: &Regex,
+        reader_name: &str,
+    ) -> Result<Duration, std::io::Error>
+    where
+        R: AsyncReadExt,
+        R: Unpin,
+    {
+        let read_text = Self::read(reader, 12, reader_name).await?;
+        let Some(captures) = regex.captures(read_text.as_str()) else {
+            return Err(std::io::Error::other(format!(
+                "Could not find delta time in linetime {reader_name} text '{read_text}'"
+            )));
         };
         assert_eq!(4, captures.len());
         Ok(
