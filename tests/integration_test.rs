@@ -203,6 +203,28 @@ async fn input_from_command_is_buffered_to_print_complete_lines_even_for_stderr(
 }
 
 #[tokio::test]
+async fn input_from_command_is_not_buffered_to_print_complete_lines_without_line_buffering() {
+    let mut args = to_os(vec!["--no-line-buffering"]);
+    args.append(&mut marionette_control::app_path_and_args(vec![]));
+    let mut put = Linetime::run(args);
+    let mut control = marionette_control::Bar::new();
+
+    control.stderr("hello").await;
+    assert_ok!(put.read_stderr_timestamp());
+    assert_ok!(put.read_stderr(" stderr: hello"));
+    control.stdout("hola\n").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: hola\n"));
+    control.stderr("world\n").await;
+    assert_ok!(put.read_stderr("world\n"));
+
+    control.exit(0).await;
+    assert_command_output_end!(&mut put);
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
 async fn application_exits_with_same_exit_code_as_command() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
     let mut control = marionette_control::Bar::new();
