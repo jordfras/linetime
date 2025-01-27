@@ -154,6 +154,26 @@ async fn input_from_stdin_is_not_buffered_to_print_complete_lines_if_flushed() {
 }
 
 #[tokio::test]
+async fn input_from_stdout_is_not_buffered_to_print_complete_lines_if_flushed() {
+    let mut args = to_os(vec!["--flush-all"]);
+    args.append(&mut marionette_control::app_path_and_args(vec![]));
+    let mut put = Linetime::run(args);
+    let mut control = marionette_control::Bar::new();
+
+    control.stdout("hello").await;
+    assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout(" stdout: hello"));
+
+    control.stdout("world!\n").await;
+    assert_ok!(put.read_stdout("world!\n"));
+
+    control.exit(0).await;
+    assert_command_output_end!(put);
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
 async fn input_from_command_is_buffered_to_print_complete_lines_even_for_stderr() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
     let mut control = marionette_control::Bar::new();
