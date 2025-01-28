@@ -1,6 +1,6 @@
 use super::paths::MARIONETTE_PATH;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 /// Picks a port number based on thread id to avoid using same port in tests running in parallel
 fn port() -> u16 {
@@ -57,11 +57,32 @@ impl Drop for Bar {
 }
 
 impl Bar {
-    pub fn new() -> Self {
-        Self {
+    /// Creates a new control bar and waits for the marionette to open its HTTP server
+    pub async fn new() -> Self {
+        let result = Self {
             http_client: Some(reqwest::Client::new()),
             url: format!("http://localhost:{}", port()),
+        };
+        result.wait_for_marionette().await;
+        result
+    }
+
+    async fn wait_for_marionette(&self) {
+        for _ in 0..1000 {
+            if self
+                .http_client
+                .as_ref()
+                .expect("Marionette already shut down")
+                .post(format!("{}/ping", self.url))
+                .send()
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
+        panic!("Marionette HTTP server doesn't seem to be started!");
     }
 
     pub async fn stdout(&self, text: &str) {

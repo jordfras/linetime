@@ -89,7 +89,7 @@ async fn stdin_is_read_when_no_command_is_executed() {
 #[tokio::test]
 async fn stdout_from_command_is_read_when_command_is_executed() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stdout("hello\n").await;
     assert_ok!(put.read_stdout_timestamp());
@@ -104,7 +104,7 @@ async fn stdout_from_command_is_read_when_command_is_executed() {
 #[tokio::test]
 async fn stderr_from_command_is_read_when_command_is_executed() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stderr("hello\n").await;
     assert_ok!(put.read_stderr_timestamp());
@@ -119,7 +119,7 @@ async fn stderr_from_command_is_read_when_command_is_executed() {
 #[tokio::test]
 async fn output_lines_get_ordererd_timestamps() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stdout("hello\n").await;
     let t1 = assert_ok!(put.read_stdout_timestamp());
@@ -185,7 +185,7 @@ async fn input_from_stdout_is_not_buffered_to_print_complete_lines_if_flushed() 
     let mut args = to_os(vec!["--flush-all"]);
     args.append(&mut marionette_control::app_path_and_args(vec![]));
     let mut put = Linetime::run(args);
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stdout("hello").await;
     assert_ok!(put.read_stdout_timestamp());
@@ -203,7 +203,7 @@ async fn input_from_stdout_is_not_buffered_to_print_complete_lines_if_flushed() 
 #[tokio::test]
 async fn input_from_command_is_buffered_to_print_complete_lines_even_for_stderr() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stdout("aaa").await;
     assert_timeout!(put.read_stdout_timestamp());
@@ -234,7 +234,7 @@ async fn input_from_command_is_not_buffered_to_print_complete_lines_without_line
     let mut args = to_os(vec!["--no-line-buffering"]);
     args.append(&mut marionette_control::app_path_and_args(vec![]));
     let mut put = Linetime::run(args);
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.stderr("hello").await;
     assert_ok!(put.read_stderr_timestamp());
@@ -254,7 +254,7 @@ async fn input_from_command_is_not_buffered_to_print_complete_lines_without_line
 #[tokio::test]
 async fn application_exits_with_same_exit_code_as_command() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     control.exit(17).await;
     assert_command_output_end!(&mut put);
@@ -270,7 +270,7 @@ async fn arguments_are_forwarded_to_command() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![
         "--option", "value",
     ]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     let args = control.args().await;
     // Ignore program name and port argument
@@ -288,7 +288,7 @@ async fn environment_variables_are_forwarded_to_command() {
         marionette_control::app_path_and_args(vec![]),
         vec![("variable".into(), "value".into())],
     );
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     assert_eq!(
         vec![("variable".to_string(), "value".to_string())],
@@ -309,7 +309,7 @@ async fn environment_variables_are_forwarded_to_command() {
 #[tokio::test]
 async fn stdin_is_ignored_when_command_is_executed() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
-    let mut control = marionette_control::Bar::new();
+    let mut control = marionette_control::Bar::new().await;
 
     put.write_stdin("ignored line").await;
     assert_timeout!(put.read_stdout_timestamp());

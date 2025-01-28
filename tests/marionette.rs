@@ -24,6 +24,7 @@ async fn main() {
                 .route("/args", web::get().to(args))
                 .route("/env", web::get().to(env))
                 .route("/exit", web::post().to(exit))
+                .route("/ping", web::post().to(ping))
                 .route("/stdout", web::post().to(stdout))
                 .route("/stderr", web::post().to(stderr))
         }
@@ -72,6 +73,9 @@ async fn page() -> HttpResponse {
               <input type="number" name="exit_code"/>
               <button type="submit">Exit</button>
             </form>
+            <form action="/ping" method="post">
+              <button type="submit">Ping</button>
+            </form>
             <form action="/stdout" method="post">
               <input type="text" name="text"/>
               <button type="submit">Stdout</button>
@@ -104,6 +108,12 @@ async fn exit(
     HttpResponse::Ok()
         .content_type(ContentType::plaintext())
         .body("Bye, bye")
+}
+
+async fn ping() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type(ContentType::plaintext())
+        .body("Pong")
 }
 
 async fn stdout(parameters: web::Form<PrintParameters>) -> HttpResponse {
