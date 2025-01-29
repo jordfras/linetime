@@ -529,7 +529,7 @@ mod tests {
         printer.print(&Token::LineFeed).unwrap();
         printer.print(&Token::Char('B')).unwrap();
 
-        //assert_all_timestamps_used(&printer);
+        assert_all_timestamps_used(&printer);
         assert_printed!(
             stream,
             "00:03.000             prefix: A\n",
