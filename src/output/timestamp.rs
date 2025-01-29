@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 pub struct Timestamp {
+    previous_time: Option<Duration>,
     #[cfg(not(test))]
     start_time: SystemTime,
     #[cfg(test)]
@@ -16,14 +17,23 @@ pub struct Timestamp {
 impl Timestamp {
     pub fn new() -> Self {
         Self {
+            previous_time: None,
             start_time: SystemTime::now(),
         }
     }
 
-    pub fn get(&self) -> Duration {
-        SystemTime::now()
+    pub fn get(&mut self) -> Duration {
+        let t = SystemTime::now()
             .duration_since(self.start_time)
-            .expect("Start time should be earlier than get")
+            .expect("Start time should be earlier than get");
+        self.previous_time = Some(t);
+        t
+    }
+}
+
+impl Timestamp {
+    pub fn previous(&self) -> Option<Duration> {
+        self.previous_time
     }
 }
 
@@ -32,6 +42,7 @@ impl Timestamp {
 impl Timestamp {
     pub fn new() -> Self {
         Self {
+            previous_time: None,
             expected_stamps: VecDeque::new(),
         }
     }
@@ -41,9 +52,12 @@ impl Timestamp {
     }
 
     pub fn get(&mut self) -> Duration {
-        self.expected_stamps
+        let t = self
+            .expected_stamps
             .pop_front()
-            .expect("Unexpected request for timestamp")
+            .expect("Unexpected request for timestamp");
+        self.previous_time = Some(t);
+        t
     }
 
     pub fn assert_all_used(&self) {
@@ -67,6 +81,24 @@ mod tests {
 
         assert_eq!(Duration::from_millis(1234), t.get());
         assert_eq!(Duration::from_millis(2345), t.get());
+    }
+
+    #[test]
+    fn previous_returns_previously_gotten_stamp() {
+        let mut t = Timestamp::new();
+        t.expect_get(Duration::from_millis(1234));
+        t.expect_get(Duration::from_millis(2345));
+
+        assert_eq!(None, t.previous());
+        assert_eq!(None, t.previous());
+
+        assert_eq!(Duration::from_millis(1234), t.get());
+        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
+        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
+
+        assert_eq!(Duration::from_millis(2345), t.get());
+        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
+        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
     }
 
     #[test]

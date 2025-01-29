@@ -31,7 +31,6 @@ pub struct Printer<'a> {
     options: Options,
 
     timestamp: Arc<Mutex<Timestamp>>,
-    previous_time: Option<Duration>,
     start_of_line: bool,
     break_tokens: VecDeque<Token>,
 }
@@ -46,7 +45,6 @@ impl<'a> Printer<'a> {
             stream,
             options,
             timestamp,
-            previous_time: None,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -149,17 +147,18 @@ impl<'a> Printer<'a> {
     }
 
     fn timestamp(&mut self) -> Result<(), std::io::Error> {
-        let t = self
-            .timestamp
-            .lock()
-            .map_err(|_| {
-                std::io::Error::other("Could not lock timestamp mutex, other thread panicked!")
-            })?
-            .get();
+        let mut timestamp_guard = self.timestamp.lock().map_err(|_| {
+            std::io::Error::other("Could not lock timestamp mutex, other thread panicked!")
+        })?;
+
+        let p = timestamp_guard.previous();
+        let t = timestamp_guard.get();
+        drop(timestamp_guard);
+
         self.print_str(format(t).as_str())?;
         if self.options.show_delta {
             self.print_str(
-                if let Some(previous) = self.previous_time {
+                if let Some(previous) = p {
                     let delta = t - previous;
                     format!(" ({})", format(delta))
                 } else {
@@ -172,7 +171,6 @@ impl<'a> Printer<'a> {
             self.print_str(format!(" {}", self.options.prefix).as_str())?;
         }
         self.print_str(": ")?;
-        self.previous_time = Some(t);
         self.start_of_line = false;
         Ok(())
     }
