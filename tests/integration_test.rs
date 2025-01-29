@@ -1,72 +1,15 @@
+mod assertions;
 mod marionette_control;
 mod paths;
 mod program_under_test;
 
+use assertions::{
+    assert_command_output_end, assert_input_end, assert_near, assert_ok, assert_timeout,
+};
 use program_under_test::Linetime;
 
 use std::time::Duration;
 use tokio::time::timeout;
-
-/// Macro that wraps a future returning a result in a timeout and asserts that the future is
-/// succesful and does not timeout
-macro_rules! assert_ok {
-    ( $future:expr ) => {
-        match timeout(Duration::from_secs(3), $future).await {
-            Ok(timeout_result) => match timeout_result {
-                Ok(result) => result,
-                Err(error) => {
-                    panic!(
-                        "Operation '{}' should be successful but it failed with: {}",
-                        stringify!($future),
-                        error
-                    );
-                }
-            },
-            Err(_) => {
-                panic!(
-                    "Operation '{}' should be successful but it timeout out",
-                    stringify!($future),
-                );
-            }
-        }
-    };
-}
-
-/// Macro that wraps a future in a timeout and asserts that the future likely would block
-/// indefinetely, by testing it with a short timeout
-macro_rules! assert_timeout {
-    ( $future:expr ) => {
-        match timeout(Duration::from_millis(500), $future).await {
-            Ok(timeout_result) => panic!(
-                "Operation '{}' should block but returned with: {:?}",
-                stringify!($future),
-                timeout_result
-            ),
-            Err(_) => {
-                // This is what we expect!
-            }
-        }
-    };
-}
-
-/// Expect program to print that end is reached of stdin
-macro_rules! assert_input_end {
-    ( $put:expr ) => {
-        assert_ok!($put.read_stdout_timestamp());
-        assert_ok!($put.read_stdout(": ␄\n"));
-    };
-}
-
-/// Expect program to print that end is reached of both stdout and stderr of the command executed
-/// by the program
-macro_rules! assert_command_output_end {
-    ( $put:expr ) => {
-        assert_ok!($put.read_stdout_timestamp());
-        assert_ok!($put.read_stdout(" stdout: ␄\n"));
-        assert_ok!($put.read_stderr_timestamp());
-        assert_ok!($put.read_stderr(" stderr: ␄\n"));
-    };
-}
 
 fn to_os(strings: Vec<&str>) -> Vec<std::ffi::OsString> {
     strings.into_iter().map(|s| s.to_string().into()).collect()
@@ -152,8 +95,7 @@ async fn delta_times_can_be_shown_after_timestamp() {
 
     assert!(t2 >= t1);
     // Allow 1 ms rounding error
-    assert!(t2 - t1 <= d2 + Duration::from_millis(1));
-    assert!(t2 - t1 + Duration::from_millis(1) >= d2);
+    assert_near!(t2 - t1, d2, Duration::from_millis(1));
 
     put.close_stdin();
     assert_ok!(put.read_stdout_timestamp());
