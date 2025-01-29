@@ -4,7 +4,6 @@ use std::time::Duration;
 #[cfg(not(test))]
 use std::time::SystemTime;
 
-#[derive(Clone)]
 pub struct Timestamp {
     #[cfg(not(test))]
     start_time: SystemTime,
@@ -47,7 +46,7 @@ impl Timestamp {
             .expect("Unexpected request for timestamp")
     }
 
-    pub fn expect_empty(&self) {
+    pub fn assert_all_used(&self) {
         assert!(
             self.expected_stamps.is_empty(),
             "All expected timestamps where not requested: {:?}",
@@ -82,6 +81,6 @@ mod tests {
     fn not_getting_all_timestamps_panics_when_checked() {
         let mut t = Timestamp::new();
         t.expect_get(Duration::from_millis(1234));
-        t.expect_empty();
+        t.assert_all_used();
     }
 }
