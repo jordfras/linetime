@@ -98,9 +98,47 @@ async fn delta_times_can_be_shown_after_timestamp() {
     assert_near!(t2 - t1, d2, Duration::from_millis(1));
 
     put.close_stdin();
+    let t3 = assert_ok!(put.read_stdout_timestamp());
+    let d3 = assert_ok!(put.read_stdout_delta());
+    assert_ok!(put.read_stdout(": ␄\n"));
+    assert!(t3 >= t2);
+    assert_near!(t3 - t2, d3, Duration::from_millis(1));
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
+async fn delta_times_are_common_for_stderr_and_stdout() {
+    let mut args = to_os(vec!["--show-delta"]);
+    args.append(&mut marionette_control::app_path_and_args(vec![]));
+    let mut put = Linetime::run(args);
+    let mut control = marionette_control::Bar::new().await;
+
+    control.stdout("hello\n").await;
+    let t1 = assert_ok!(put.read_stdout_timestamp());
+    assert_ok!(put.read_stdout("             stdout: hello\n"));
+
+    control.stderr("some\n").await;
+    let t2 = assert_ok!(put.read_stderr_timestamp());
+    let d2 = assert_ok!(put.read_stderr_delta());
+    assert_ok!(put.read_stderr(" stderr: some\n"));
+    assert!(t2 >= t1);
+    assert_near!(t2 - t1, d2, Duration::from_millis(1));
+
+    control.stdout("world\n").await;
+    let t3 = assert_ok!(put.read_stdout_timestamp());
+    let d3 = assert_ok!(put.read_stdout_delta());
+    assert_ok!(put.read_stdout(" stdout: world\n"));
+    assert!(t3 >= t2);
+    assert_near!(t3 - t2, d3, Duration::from_millis(1));
+
+    control.exit(0).await;
     assert_ok!(put.read_stdout_timestamp());
     assert_ok!(put.read_stdout_delta());
-    assert_ok!(put.read_stdout(": ␄\n"));
+    assert_ok!(put.read_stdout(" stdout: ␄\n"));
+    assert_ok!(put.read_stderr_timestamp());
+    assert_ok!(put.read_stderr_delta());
+    assert_ok!(put.read_stderr(" stderr: ␄\n"));
 
     assert!(put.wait().await.success());
 }

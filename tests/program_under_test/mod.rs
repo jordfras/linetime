@@ -98,6 +98,11 @@ impl Linetime {
         Self::read_delta(&mut self.stdout, &self.delta_regex, "stdout").await
     }
 
+    /// Reads a delta time from the program's stderr and returns it as a Duration
+    pub async fn read_stderr_delta(&mut self) -> Result<Duration, std::io::Error> {
+        Self::read_delta(&mut self.stderr, &self.delta_regex, "stderr").await
+    }
+
     /// Reads some text from the program's stdout and checks that it matches the expected text,
     /// otherwise it returns an error
     pub async fn read_stdout(&mut self, expected_text: &str) -> Result<(), std::io::Error> {
