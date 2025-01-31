@@ -1,8 +1,11 @@
 #[cfg(test)]
 use std::collections::VecDeque;
-use std::time::Duration;
 #[cfg(not(test))]
 use std::time::SystemTime;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 pub struct Timestamp {
     previous_time: Option<Duration>,
@@ -67,6 +70,51 @@ impl Timestamp {
             self.expected_stamps
         );
     }
+}
+
+/// Gets a timestamp and creates a string suitable for prefixing output lines
+pub fn create_prefix(timestamp: &Arc<Mutex<Timestamp>>, with_delta: bool) -> String {
+    let Ok(mut guard) = timestamp.lock() else {
+        // If other thread has panicked, we return a string of correct length with spaces instead
+        return " ".repeat(stamp_length(with_delta));
+    };
+    let previous_time = guard.previous();
+    let time = guard.get();
+    drop(guard);
+
+    let mut result = format(time);
+    if with_delta {
+        result += if let Some(previous_time) = previous_time {
+            format!(" ({})", format(time - previous_time))
+        } else {
+            " ".repeat(duration_length() + 3)
+        }
+        .as_str();
+    }
+    result
+}
+
+/// The string length of a single duration string
+fn duration_length() -> usize {
+    2 + 1 + 2 + 1 + 3
+}
+
+/// The string length of a complete timestamp string
+fn stamp_length(with_delta: bool) -> usize {
+    if with_delta {
+        duration_length() * 2 + 1
+    } else {
+        duration_length()
+    }
+}
+
+fn format(duration: Duration) -> String {
+    format!(
+        "{:0>2}:{:0>2}.{:0>3}",
+        duration.as_secs() / 60,
+        duration.as_secs() % 60,
+        duration.subsec_millis()
+    )
 }
 
 #[cfg(test)]

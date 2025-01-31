@@ -3,7 +3,6 @@ use crate::token::Token;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 pub mod buffered;
 pub mod timestamp;
@@ -64,12 +63,12 @@ impl<'a> Printer<'a> {
         }
 
         if self.start_of_line {
-            self.timestamp()?;
+            self.line_prefix()?;
         } else if *token == Token::EndOfFile {
             // Ensure EOF is always written on a new line with its own timestamp, even if an
             // explicit linefeed token was not received before
             self.print_str("\n")?;
-            self.timestamp()?;
+            self.line_prefix()?;
         }
 
         self.print_token(token)?;
@@ -146,27 +145,9 @@ impl<'a> Printer<'a> {
         Ok(())
     }
 
-    fn timestamp(&mut self) -> Result<(), std::io::Error> {
-        let mut timestamp_guard = self.timestamp.lock().map_err(|_| {
-            std::io::Error::other("Could not lock timestamp mutex, other thread panicked!")
-        })?;
-
-        let p = timestamp_guard.previous();
-        let t = timestamp_guard.get();
-        drop(timestamp_guard);
-
-        self.print_str(format(t).as_str())?;
-        if self.options.show_delta {
-            self.print_str(
-                if let Some(previous) = p {
-                    let delta = t - previous;
-                    format!(" ({})", format(delta))
-                } else {
-                    "            ".to_string()
-                }
-                .as_str(),
-            )?;
-        }
+    fn line_prefix(&mut self) -> Result<(), std::io::Error> {
+        let timestamp_prefix = timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+        self.print_str(timestamp_prefix.as_str())?;
         if !self.options.prefix.is_empty() {
             self.print_str(format!(" {}", self.options.prefix).as_str())?;
         }
@@ -176,18 +157,10 @@ impl<'a> Printer<'a> {
     }
 }
 
-fn format(duration: Duration) -> String {
-    format!(
-        "{:0>2}:{:0>2}.{:0>3}",
-        duration.as_secs() / 60,
-        duration.as_secs() % 60,
-        duration.subsec_millis()
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     macro_rules! assert_printed {
         ($stream:ident, $text:expr) => {
