@@ -62,17 +62,15 @@ impl<'a> Printer<'a> {
             self.newline()?;
         }
 
-        if self.start_of_line {
-            self.line_prefix()?;
-        } else if *token == Token::EndOfFile {
-            // Ensure EOF is always written on a new line with its own timestamp, even if an
-            // explicit linefeed token was not received before
-            self.print_str("\n")?;
+        if self.start_of_line && *token != Token::EndOfFile {
             self.line_prefix()?;
         }
 
         self.print_token(token)?;
         if *token == Token::LineFeed {
+            self.newline()?;
+        } else if !self.start_of_line && *token == Token::EndOfFile {
+            // Ensure ending on a new line after EOF
             self.newline()?;
         }
         if self.options.flush_all {
@@ -129,7 +127,7 @@ impl<'a> Printer<'a> {
                     self.print_escape(&sequence.text[1..])
                 }
             }
-            Token::EndOfFile => self.print_str("\u{2404}\n"),
+            Token::EndOfFile => Ok(()),
         }
     }
 
@@ -367,11 +365,10 @@ mod tests {
         expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::LineFeed).unwrap();
-        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
         assert_all_timestamps_used(&printer);
-        assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: \u{2404}\n");
+        assert_printed!(stream, "00:03.000: A\u{240a}\n");
     }
 
     #[test]
@@ -381,11 +378,10 @@ mod tests {
 
         expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::LineFeed).unwrap();
-        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
         assert_all_timestamps_used(&printer);
-        assert_printed!(stream, "00:03.000: \u{240a}\n", "00:04.000: \u{2404}\n");
+        assert_printed!(stream, "00:03.000: \u{240a}\n");
     }
 
     #[test]
@@ -395,11 +391,10 @@ mod tests {
 
         expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
-        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
         assert_all_timestamps_used(&printer);
-        assert_printed!(stream, "00:03.000: A\n", "00:04.000: \u{2404}\n");
+        assert_printed!(stream, "00:03.000: A\n");
     }
 
     #[test]

@@ -46,7 +46,7 @@ pub(crate) use assert_timeout;
 macro_rules! assert_input_end {
     ( $put:expr ) => {
         assert_ok!($put.read_stdout_timestamp());
-        assert_ok!($put.read_stdout(": ␄\n"));
+        assert_ok!($put.read_stdout(": ␃\n"));
     };
 }
 pub(crate) use assert_input_end;
@@ -56,9 +56,7 @@ pub(crate) use assert_input_end;
 macro_rules! assert_command_output_end {
     ( $put:expr ) => {
         assert_ok!($put.read_stdout_timestamp());
-        assert_ok!($put.read_stdout(" stdout: ␄\n"));
-        assert_ok!($put.read_stderr_timestamp());
-        assert_ok!($put.read_stderr(" stderr: ␄\n"));
+        assert_ok!($put.read_stdout(" ------: ␃\n"));
     };
 }
 pub(crate) use assert_command_output_end;

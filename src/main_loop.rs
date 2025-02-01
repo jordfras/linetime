@@ -10,8 +10,8 @@ use std::thread::{self, ScopedJoinHandle};
 // and stderr of an executed command to stdout and stderr of this process.
 pub struct MainLoop<'a> {
     options: output::Options,
-    // Common Timestamp each stream loop to get common start point and delta that is not
-    // per stream
+    prefix_length: usize,
+    // Common Timestamp for stream loops to get common start point and delta that is not per stream
     timestamp: Arc<Mutex<Timestamp>>,
     loops: Vec<StreamLoop<'a>>,
 }
@@ -20,6 +20,7 @@ impl<'a> MainLoop<'a> {
     pub fn new(options: output::Options) -> Self {
         Self {
             options,
+            prefix_length: 0,
             timestamp: Arc::new(Mutex::new(Timestamp::new())),
             loops: vec![],
         }
@@ -31,6 +32,7 @@ impl<'a> MainLoop<'a> {
         output: &'a mut (dyn Write + Send),
         prefix: &str,
     ) {
+        self.prefix_length = std::cmp::max(self.prefix_length, prefix.len());
         let mut options = self.options.clone();
         options.prefix = prefix.to_string();
         self.loops.push(StreamLoop::new(
@@ -53,6 +55,16 @@ impl<'a> MainLoop<'a> {
                 t.join()
                     .expect("Thread reading tokens unexpectedly panicked")?;
             }
+
+            let timestamp_prefix =
+                output::timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+            println!(
+                "{}{}{}: \u{2403}",
+                timestamp_prefix,
+                if self.prefix_length > 0 { " " } else { "" },
+                "-".repeat(self.prefix_length)
+            );
+
             Ok(())
         })
     }

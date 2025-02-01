@@ -100,7 +100,7 @@ async fn delta_times_can_be_shown_after_timestamp() {
     put.close_stdin();
     let t3 = assert_ok!(put.read_stdout_timestamp());
     let d3 = assert_ok!(put.read_stdout_delta());
-    assert_ok!(put.read_stdout(": ␄\n"));
+    assert_ok!(put.read_stdout(": ␃\n"));
     assert!(t3 >= t2);
     assert_near!(t3 - t2, d3, Duration::from_millis(1));
 
@@ -135,10 +135,7 @@ async fn delta_times_are_common_for_stderr_and_stdout() {
     control.exit(0).await;
     assert_ok!(put.read_stdout_timestamp());
     assert_ok!(put.read_stdout_delta());
-    assert_ok!(put.read_stdout(" stdout: ␄\n"));
-    assert_ok!(put.read_stderr_timestamp());
-    assert_ok!(put.read_stderr_delta());
-    assert_ok!(put.read_stderr(" stderr: ␄\n"));
+    assert_ok!(put.read_stdout(" ------: ␃\n"));
 
     assert!(put.wait().await.success());
 }
