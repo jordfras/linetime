@@ -85,12 +85,17 @@ impl Linetime {
 
     /// Reads a timestamp from the program's stdout and returns it as a Duration
     pub async fn read_stdout_timestamp(&mut self) -> Result<Duration, std::io::Error> {
-        Self::read_timestamp(&mut self.stdout, &self.timestamp_regex, "stdout").await
+        Self::read_timestamp(&mut self.stdout, &self.timestamp_regex, "stdout", false).await
     }
 
     /// Reads a timestamp from the program's stdout and returns it as a Duration
     pub async fn read_stderr_timestamp(&mut self) -> Result<Duration, std::io::Error> {
-        Self::read_timestamp(&mut self.stderr, &self.timestamp_regex, "stderr").await
+        Self::read_timestamp(&mut self.stderr, &self.timestamp_regex, "stderr", false).await
+    }
+
+    /// Reads a timestamp from the program's stdout and returns it as a Duration
+    pub async fn read_stdout_microsecond_timestamp(&mut self) -> Result<Duration, std::io::Error> {
+        Self::read_timestamp(&mut self.stdout, &self.timestamp_regex, "stdout", true).await
     }
 
     /// Reads a delta time from the program's stdout and returns it as a Duration
@@ -177,12 +182,14 @@ impl Linetime {
         reader: &mut R,
         regex: &Regex,
         reader_name: &str,
+        microseconds: bool,
     ) -> Result<Duration, std::io::Error>
     where
         R: AsyncReadExt,
         R: Unpin,
     {
-        let read_text = Self::read(reader, 9, reader_name).await?;
+        let expected_length = if microseconds { 12 } else { 9 };
+        let read_text = Self::read(reader, expected_length, reader_name).await?;
         let Some(captures) = regex.captures(read_text.as_str()) else {
             return Err(std::io::Error::other(format!(
                 "Could not find timestamp in linetime {reader_name} text '{read_text}'"

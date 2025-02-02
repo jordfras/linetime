@@ -73,48 +73,69 @@ impl Timestamp {
 }
 
 /// Gets a timestamp and creates a string suitable for prefixing output lines
-pub fn create_prefix(timestamp: &Arc<Mutex<Timestamp>>, with_delta: bool) -> String {
+pub fn create_prefix(
+    timestamp: &Arc<Mutex<Timestamp>>,
+    with_delta: bool,
+    microseconds: bool,
+) -> String {
     let Ok(mut guard) = timestamp.lock() else {
         // If other thread has panicked, we return a string of correct length with spaces instead
-        return " ".repeat(stamp_length(with_delta));
+        return " ".repeat(stamp_length(with_delta, microseconds));
     };
     let previous_time = guard.previous();
     let time = guard.get();
     drop(guard);
 
-    let mut result = format(time);
+    let mut result = format(time, microseconds);
     if with_delta {
         result += if let Some(previous_time) = previous_time {
-            format!(" ({})", format(time - previous_time))
+            format!(" ({})", format(time - previous_time, microseconds))
         } else {
-            " ".repeat(duration_length() + 3)
+            " ".repeat(duration_length(microseconds) + 3)
         }
         .as_str();
     }
     result
 }
 
-/// The string length of a single duration string
-fn duration_length() -> usize {
-    2 + 1 + 2 + 1 + 3
-}
-
-/// The string length of a complete timestamp string
-fn stamp_length(with_delta: bool) -> usize {
-    if with_delta {
-        duration_length() * 2 + 1
+fn subsec_length(microseconds: bool) -> usize {
+    if microseconds {
+        6
     } else {
-        duration_length()
+        3
     }
 }
 
-fn format(duration: Duration) -> String {
-    format!(
-        "{:0>2}:{:0>2}.{:0>3}",
-        duration.as_secs() / 60,
-        duration.as_secs() % 60,
-        duration.subsec_millis()
-    )
+/// The string length of a single duration string
+fn duration_length(microseconds: bool) -> usize {
+    2 + 1 + 2 + 1 + subsec_length(microseconds)
+}
+
+/// The string length of a complete timestamp string
+fn stamp_length(with_delta: bool, microseconds: bool) -> usize {
+    if with_delta {
+        duration_length(microseconds) * 2 + 3
+    } else {
+        duration_length(microseconds)
+    }
+}
+
+fn format(duration: Duration, microseconds: bool) -> String {
+    if microseconds {
+        format!(
+            "{:0>2}:{:0>2}.{:0>6}",
+            duration.as_secs() / 60,
+            duration.as_secs() % 60,
+            duration.subsec_micros()
+        )
+    } else {
+        format!(
+            "{:0>2}:{:0>2}.{:0>3}",
+            duration.as_secs() / 60,
+            duration.as_secs() % 60,
+            duration.subsec_millis()
+        )
+    }
 }
 
 #[cfg(test)]

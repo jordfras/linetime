@@ -22,6 +22,12 @@ struct ProgramOptions {
     #[options(short = "e", help = "show ANSI escape sequences")]
     show_escape: bool,
 
+    #[options(
+        short = "u",
+        help = "enable microseconds in timestamps and delta times"
+    )]
+    micros: bool,
+
     #[options(short = "l", help = "disable line buffering when executing command")]
     no_line_buffering: bool,
 
@@ -48,6 +54,7 @@ impl From<&ProgramOptions> for output::Options {
     fn from(options: &ProgramOptions) -> Self {
         Self {
             show_delta: options.show_delta,
+            microseconds: options.micros,
             prefix: String::new(),
             show_control: options.show_control,
             show_escape: options.show_escape,
@@ -59,6 +66,7 @@ impl From<&ProgramOptions> for output::Options {
     fn from(options: &ProgramOptions) -> Self {
         Self {
             show_delta: options.show_delta,
+            microseconds: options.micros,
             prefix: String::new(),
             show_control: options.show_control,
             show_escape: options.show_escape,

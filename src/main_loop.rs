@@ -56,8 +56,11 @@ impl<'a> MainLoop<'a> {
                     .expect("Thread reading tokens unexpectedly panicked")?;
             }
 
-            let timestamp_prefix =
-                output::timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+            let timestamp_prefix = output::timestamp::create_prefix(
+                &self.timestamp,
+                self.options.show_delta,
+                self.options.microseconds,
+            );
             println!(
                 "{}{}{}: \u{23f1} End",
                 timestamp_prefix,
