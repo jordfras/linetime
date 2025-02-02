@@ -59,7 +59,7 @@ impl<'a> MainLoop<'a> {
             let timestamp_prefix =
                 output::timestamp::create_prefix(&self.timestamp, self.options.show_delta);
             println!(
-                "{}{}{}: \u{2403}",
+                "{}{}{}: \u{23f1} End",
                 timestamp_prefix,
                 if self.prefix_length > 0 { " " } else { "" },
                 "-".repeat(self.prefix_length)
