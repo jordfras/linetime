@@ -13,6 +13,8 @@ use self::timestamp::Timestamp;
 pub struct Options {
     /// Show delta time since previous line
     pub show_delta: bool,
+    /// Microseconds in timestamps and delta times
+    pub microseconds: bool,
     /// Prefix added to start of each line together with a timestamp
     pub prefix: String,
     /// Show control characters as unicode symbols
@@ -144,7 +146,11 @@ impl<'a> Printer<'a> {
     }
 
     fn line_prefix(&mut self) -> Result<(), std::io::Error> {
-        let timestamp_prefix = timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+        let timestamp_prefix = timestamp::create_prefix(
+            &self.timestamp,
+            self.options.show_delta,
+            self.options.microseconds,
+        );
         self.print_str(timestamp_prefix.as_str())?;
         if !self.options.prefix.is_empty() {
             self.print_str(format!(" {}", self.options.prefix).as_str())?;
@@ -190,6 +196,7 @@ mod tests {
             Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
+                microseconds: false,
                 prefix: String::new(),
                 show_control: true,
                 show_escape: true,
@@ -405,6 +412,7 @@ mod tests {
             Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
+                microseconds: false,
                 prefix: String::new(),
                 show_control: false,
                 show_escape: true,
@@ -429,6 +437,7 @@ mod tests {
             Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
+                microseconds: false,
                 prefix: String::new(),
                 show_control: true,
                 show_escape: false,
@@ -458,6 +467,7 @@ mod tests {
             Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
+                microseconds: false,
                 prefix: "prefix".to_string(),
                 show_control: false,
                 show_escape: false,
@@ -481,6 +491,7 @@ mod tests {
             Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: true,
+                microseconds: false,
                 prefix: "prefix".to_string(),
                 show_control: false,
                 show_escape: false,
@@ -500,6 +511,37 @@ mod tests {
             stream,
             "00:03.000             prefix: A\n",
             "00:03.100 (00:00.100) prefix: B"
+        );
+    }
+
+    #[test]
+    fn microsecond_precision_of_timestamp_and_delta() {
+        let mut stream = Vec::<u8>::new();
+        let mut printer = Printer::new(
+            &mut stream,
+            Arc::new(Mutex::new(Timestamp::new())),
+            Options {
+                show_delta: true,
+                microseconds: true,
+                prefix: String::new(),
+                show_control: false,
+                show_escape: false,
+                dump_tokens: false,
+                flush_all: false,
+            },
+        );
+
+        expect_get_timestamp(&mut printer, Duration::from_micros(3000123));
+        expect_get_timestamp(&mut printer, Duration::from_micros(3100456));
+        printer.print(&Token::Char('A')).unwrap();
+        printer.print(&Token::LineFeed).unwrap();
+        printer.print(&Token::Char('B')).unwrap();
+
+        assert_all_timestamps_used(&printer);
+        assert_printed!(
+            stream,
+            "00:03.000123               : A\n",
+            "00:03.100456 (00:00.100333): B"
         );
     }
 }

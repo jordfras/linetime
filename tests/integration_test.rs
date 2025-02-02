@@ -80,6 +80,27 @@ async fn output_lines_get_ordererd_timestamps() {
 }
 
 #[tokio::test]
+async fn microsecond_precison_can_be_enabled() {
+    let mut put = Linetime::run(to_os(vec!["--micros"]));
+
+    put.write_stdin("hello\n").await;
+    let t1 = assert_ok!(put.read_stdout_microsecond_timestamp());
+    assert_ok!(put.read_stdout(": hello\n"));
+
+    put.write_stdin("world\n").await;
+    let t2 = assert_ok!(put.read_stdout_microsecond_timestamp());
+    assert_ok!(put.read_stdout(": world\n"));
+    assert!(t2 >= t1);
+
+    put.close_stdin();
+    let t3 = assert_ok!(put.read_stdout_microsecond_timestamp());
+    assert_ok!(put.read_stdout(": ⏱ End\n"));
+    assert!(t3 >= t2);
+
+    assert!(put.wait().await.success());
+}
+
+#[tokio::test]
 async fn delta_times_can_be_shown_after_timestamp() {
     let mut put = Linetime::run(to_os(vec!["--show-delta"]));
 
@@ -100,7 +121,7 @@ async fn delta_times_can_be_shown_after_timestamp() {
     put.close_stdin();
     let t3 = assert_ok!(put.read_stdout_timestamp());
     let d3 = assert_ok!(put.read_stdout_delta());
-    assert_ok!(put.read_stdout(": ␃\n"));
+    assert_ok!(put.read_stdout(": ⏱ End\n"));
     assert!(t3 >= t2);
     assert_near!(t3 - t2, d3, Duration::from_millis(1));
 
@@ -135,7 +156,7 @@ async fn delta_times_are_common_for_stderr_and_stdout() {
     control.exit(0).await;
     assert_ok!(put.read_stdout_timestamp());
     assert_ok!(put.read_stdout_delta());
-    assert_ok!(put.read_stdout(" ------: ␃\n"));
+    assert_ok!(put.read_stdout(" ------: ⏱ End\n"));
 
     assert!(put.wait().await.success());
 }
