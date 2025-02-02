@@ -1,11 +1,14 @@
 #[cfg(test)]
 use std::collections::VecDeque;
-use std::time::Duration;
 #[cfg(not(test))]
 use std::time::SystemTime;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-#[derive(Clone)]
 pub struct Timestamp {
+    previous_time: Option<Duration>,
     #[cfg(not(test))]
     start_time: SystemTime,
     #[cfg(test)]
@@ -17,14 +20,23 @@ pub struct Timestamp {
 impl Timestamp {
     pub fn new() -> Self {
         Self {
+            previous_time: None,
             start_time: SystemTime::now(),
         }
     }
 
-    pub fn get(&self) -> Duration {
-        SystemTime::now()
+    pub fn get(&mut self) -> Duration {
+        let t = SystemTime::now()
             .duration_since(self.start_time)
-            .expect("Start time should be earlier than get")
+            .expect("Start time should be earlier than get");
+        self.previous_time = Some(t);
+        t
+    }
+}
+
+impl Timestamp {
+    pub fn previous(&self) -> Option<Duration> {
+        self.previous_time
     }
 }
 
@@ -33,6 +45,7 @@ impl Timestamp {
 impl Timestamp {
     pub fn new() -> Self {
         Self {
+            previous_time: None,
             expected_stamps: VecDeque::new(),
         }
     }
@@ -42,18 +55,66 @@ impl Timestamp {
     }
 
     pub fn get(&mut self) -> Duration {
-        self.expected_stamps
+        let t = self
+            .expected_stamps
             .pop_front()
-            .expect("Unexpected request for timestamp")
+            .expect("Unexpected request for timestamp");
+        self.previous_time = Some(t);
+        t
     }
 
-    pub fn expect_empty(&self) {
+    pub fn assert_all_used(&self) {
         assert!(
             self.expected_stamps.is_empty(),
             "All expected timestamps where not requested: {:?}",
             self.expected_stamps
         );
     }
+}
+
+/// Gets a timestamp and creates a string suitable for prefixing output lines
+pub fn create_prefix(timestamp: &Arc<Mutex<Timestamp>>, with_delta: bool) -> String {
+    let Ok(mut guard) = timestamp.lock() else {
+        // If other thread has panicked, we return a string of correct length with spaces instead
+        return " ".repeat(stamp_length(with_delta));
+    };
+    let previous_time = guard.previous();
+    let time = guard.get();
+    drop(guard);
+
+    let mut result = format(time);
+    if with_delta {
+        result += if let Some(previous_time) = previous_time {
+            format!(" ({})", format(time - previous_time))
+        } else {
+            " ".repeat(duration_length() + 3)
+        }
+        .as_str();
+    }
+    result
+}
+
+/// The string length of a single duration string
+fn duration_length() -> usize {
+    2 + 1 + 2 + 1 + 3
+}
+
+/// The string length of a complete timestamp string
+fn stamp_length(with_delta: bool) -> usize {
+    if with_delta {
+        duration_length() * 2 + 1
+    } else {
+        duration_length()
+    }
+}
+
+fn format(duration: Duration) -> String {
+    format!(
+        "{:0>2}:{:0>2}.{:0>3}",
+        duration.as_secs() / 60,
+        duration.as_secs() % 60,
+        duration.subsec_millis()
+    )
 }
 
 #[cfg(test)]
@@ -71,6 +132,24 @@ mod tests {
     }
 
     #[test]
+    fn previous_returns_previously_gotten_stamp() {
+        let mut t = Timestamp::new();
+        t.expect_get(Duration::from_millis(1234));
+        t.expect_get(Duration::from_millis(2345));
+
+        assert_eq!(None, t.previous());
+        assert_eq!(None, t.previous());
+
+        assert_eq!(Duration::from_millis(1234), t.get());
+        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
+        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
+
+        assert_eq!(Duration::from_millis(2345), t.get());
+        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
+        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
+    }
+
+    #[test]
     #[should_panic(expected = "Unexpected request for timestamp")]
     fn get_more_than_available_panics() {
         let mut t = Timestamp::new();
@@ -82,6 +161,6 @@ mod tests {
     fn not_getting_all_timestamps_panics_when_checked() {
         let mut t = Timestamp::new();
         t.expect_get(Duration::from_millis(1234));
-        t.expect_empty();
+        t.assert_all_used();
     }
 }

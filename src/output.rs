@@ -2,7 +2,7 @@ use crate::token::escape;
 use crate::token::Token;
 use std::collections::VecDeque;
 use std::io::Write;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 pub mod buffered;
 pub mod timestamp;
@@ -29,19 +29,21 @@ pub struct Printer<'a> {
     stream: &'a mut (dyn Write + Send),
     options: Options,
 
-    timestamp: Timestamp,
-    previous_time: Option<Duration>,
+    timestamp: Arc<Mutex<Timestamp>>,
     start_of_line: bool,
     break_tokens: VecDeque<Token>,
 }
 
 impl<'a> Printer<'a> {
-    pub fn new(stream: &'a mut (dyn Write + Send), timestamp: Timestamp, options: Options) -> Self {
+    pub fn new(
+        stream: &'a mut (dyn Write + Send),
+        timestamp: Arc<Mutex<Timestamp>>,
+        options: Options,
+    ) -> Self {
         Self {
             stream,
             options,
             timestamp,
-            previous_time: None,
             start_of_line: true,
             break_tokens: VecDeque::new(),
         }
@@ -60,17 +62,15 @@ impl<'a> Printer<'a> {
             self.newline()?;
         }
 
-        if self.start_of_line {
-            self.timestamp()?;
-        } else if *token == Token::EndOfFile {
-            // Ensure EOF is always written on a new line with its own timestamp, even if an
-            // explicit linefeed token was not received before
-            self.print_str("\n")?;
-            self.timestamp()?;
+        if self.start_of_line && *token != Token::EndOfFile {
+            self.line_prefix()?;
         }
 
         self.print_token(token)?;
         if *token == Token::LineFeed {
+            self.newline()?;
+        } else if !self.start_of_line && *token == Token::EndOfFile {
+            // Ensure ending on a new line after EOF
             self.newline()?;
         }
         if self.options.flush_all {
@@ -127,7 +127,7 @@ impl<'a> Printer<'a> {
                     self.print_escape(&sequence.text[1..])
                 }
             }
-            Token::EndOfFile => self.print_str("\u{2404}\n"),
+            Token::EndOfFile => Ok(()),
         }
     }
 
@@ -143,42 +143,22 @@ impl<'a> Printer<'a> {
         Ok(())
     }
 
-    fn timestamp(&mut self) -> Result<(), std::io::Error> {
-        let t = self.timestamp.get();
-        self.print_str(format(t).as_str())?;
-        if self.options.show_delta {
-            self.print_str(
-                if let Some(previous) = self.previous_time {
-                    let delta = t - previous;
-                    format!(" ({})", format(delta))
-                } else {
-                    "            ".to_string()
-                }
-                .as_str(),
-            )?;
-        }
+    fn line_prefix(&mut self) -> Result<(), std::io::Error> {
+        let timestamp_prefix = timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+        self.print_str(timestamp_prefix.as_str())?;
         if !self.options.prefix.is_empty() {
             self.print_str(format!(" {}", self.options.prefix).as_str())?;
         }
         self.print_str(": ")?;
-        self.previous_time = Some(t);
         self.start_of_line = false;
         Ok(())
     }
 }
 
-fn format(duration: Duration) -> String {
-    format!(
-        "{:0>2}:{:0>2}.{:0>3}",
-        duration.as_secs() / 60,
-        duration.as_secs() % 60,
-        duration.subsec_millis()
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     macro_rules! assert_printed {
         ($stream:ident, $text:expr) => {
@@ -207,7 +187,7 @@ mod tests {
     fn printer_showing_control_and_escape(stream: &'_ mut Vec<u8>) -> Printer<'_> {
         Printer::new(
             stream,
-            Timestamp::new(),
+            Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
                 prefix: String::new(),
@@ -219,15 +199,23 @@ mod tests {
         )
     }
 
+    fn expect_get_timestamp(printer: &mut Printer, timestamp: Duration) {
+        printer.timestamp.lock().unwrap().expect_get(timestamp);
+    }
+
+    fn assert_all_timestamps_used(printer: &Printer) {
+        printer.timestamp.lock().unwrap().assert_all_used();
+    }
+
     #[test]
     fn timestamp_is_added_at_beginning_of_lines() {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A");
     }
 
@@ -236,15 +224,15 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::LineFeed).unwrap();
 
         // Timestamp is not request until first token on new line is received
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: B");
     }
 
@@ -253,14 +241,14 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::CarriageReturn).unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\u{240d}\r\n", "00:04.000: B");
     }
 
@@ -269,15 +257,15 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::CarriageReturn).unwrap();
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\u{240d}\u{240a}\r\n", "00:04.000: B");
     }
 
@@ -286,21 +274,21 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::CarriageReturn).unwrap();
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::CarriageReturn).unwrap();
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(5));
+        expect_get_timestamp(&mut printer, Duration::from_secs(5));
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(6));
+        expect_get_timestamp(&mut printer, Duration::from_secs(6));
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(
             stream,
             "00:03.000: \u{240d}\u{240a}\r\n",
@@ -315,7 +303,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::CarriageReturn).unwrap();
         printer
@@ -325,10 +313,10 @@ mod tests {
             ))
             .unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\u{240d}\u{241b}[K\r\n", "00:04.000: B");
     }
 
@@ -337,7 +325,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer
             .print(&esc_token!(
@@ -346,10 +334,10 @@ mod tests {
             ))
             .unwrap();
 
-        printer.timestamp.expect_get(Duration::from_secs(4));
+        expect_get_timestamp(&mut printer, Duration::from_secs(4));
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\u{241b}[2K\n", "00:04.000: B");
     }
 
@@ -358,14 +346,14 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer
             .print(&esc_token!(escape::SequenceCommand::Unhandled, "\x1b[31m"))
             .unwrap();
         printer.print(&Token::Char('B')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\x1b[31mB");
     }
 
@@ -374,14 +362,13 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::LineFeed).unwrap();
-        printer.timestamp.expect_get(Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
-        printer.timestamp.expect_empty();
-        assert_printed!(stream, "00:03.000: A\u{240a}\n", "00:04.000: \u{2404}\n");
+        assert_all_timestamps_used(&printer);
+        assert_printed!(stream, "00:03.000: A\u{240a}\n");
     }
 
     #[test]
@@ -389,13 +376,12 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::LineFeed).unwrap();
-        printer.timestamp.expect_get(Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
-        printer.timestamp.expect_empty();
-        assert_printed!(stream, "00:03.000: \u{240a}\n", "00:04.000: \u{2404}\n");
+        assert_all_timestamps_used(&printer);
+        assert_printed!(stream, "00:03.000: \u{240a}\n");
     }
 
     #[test]
@@ -403,13 +389,12 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = printer_showing_control_and_escape(&mut stream);
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
-        printer.timestamp.expect_get(Duration::from_secs(4));
         printer.print(&Token::EndOfFile).unwrap();
 
-        printer.timestamp.expect_empty();
-        assert_printed!(stream, "00:03.000: A\n", "00:04.000: \u{2404}\n");
+        assert_all_timestamps_used(&printer);
+        assert_printed!(stream, "00:03.000: A\n");
     }
 
     #[test]
@@ -417,7 +402,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
-            Timestamp::new(),
+            Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
                 prefix: String::new(),
@@ -428,11 +413,11 @@ mod tests {
             },
         );
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::LineFeed).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A\n");
     }
 
@@ -441,7 +426,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
-            Timestamp::new(),
+            Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
                 prefix: String::new(),
@@ -452,7 +437,7 @@ mod tests {
             },
         );
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
         printer
             .print(&esc_token!(
@@ -461,7 +446,7 @@ mod tests {
             ))
             .unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000: A");
     }
 
@@ -470,7 +455,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
-            Timestamp::new(),
+            Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: false,
                 prefix: "prefix".to_string(),
@@ -481,10 +466,10 @@ mod tests {
             },
         );
 
-        printer.timestamp.expect_get(Duration::from_secs(3));
+        expect_get_timestamp(&mut printer, Duration::from_secs(3));
         printer.print(&Token::Char('A')).unwrap();
 
-        printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(stream, "00:03.000 prefix: A");
     }
 
@@ -493,7 +478,7 @@ mod tests {
         let mut stream = Vec::<u8>::new();
         let mut printer = Printer::new(
             &mut stream,
-            Timestamp::new(),
+            Arc::new(Mutex::new(Timestamp::new())),
             Options {
                 show_delta: true,
                 prefix: "prefix".to_string(),
@@ -504,13 +489,13 @@ mod tests {
             },
         );
 
-        printer.timestamp.expect_get(Duration::from_millis(3000));
-        printer.timestamp.expect_get(Duration::from_millis(3100));
+        expect_get_timestamp(&mut printer, Duration::from_millis(3000));
+        expect_get_timestamp(&mut printer, Duration::from_millis(3100));
         printer.print(&Token::Char('A')).unwrap();
         printer.print(&Token::LineFeed).unwrap();
         printer.print(&Token::Char('B')).unwrap();
 
-        //printer.timestamp.expect_empty();
+        assert_all_timestamps_used(&printer);
         assert_printed!(
             stream,
             "00:03.000             prefix: A\n",

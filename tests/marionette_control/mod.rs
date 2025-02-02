@@ -59,7 +59,7 @@ impl Drop for Bar {
 impl Bar {
     /// Creates a new control bar and waits for the marionette to open its HTTP server
     pub async fn new() -> Self {
-        let result = Self {
+        let mut result = Self {
             http_client: Some(reqwest::Client::new()),
             url: format!("http://localhost:{}", port()),
         };
@@ -67,8 +67,8 @@ impl Bar {
         result
     }
 
-    async fn wait_for_marionette(&self) {
-        for _ in 0..1000 {
+    async fn wait_for_marionette(&mut self) {
+        for _ in 0..10 {
             if self
                 .http_client
                 .as_ref()
@@ -80,8 +80,9 @@ impl Bar {
             {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        self.http_client = None;
         panic!("Marionette HTTP server doesn't seem to be started!");
     }
 

@@ -3,14 +3,16 @@ use crate::output::timestamp::Timestamp;
 use crate::output::{self, Printer};
 use crate::token::{SerialTokenizer, Token};
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, ScopedJoinHandle};
 
 // Represents one or two loops reading tokens from streams printing to others, e.g., from stdout
 // and stderr of an executed command to stdout and stderr of this process.
 pub struct MainLoop<'a> {
     options: output::Options,
-    // Common TimeStamp cloned for each stream loop to get common start point
-    timestamp: Timestamp,
+    prefix_length: usize,
+    // Common Timestamp for stream loops to get common start point and delta that is not per stream
+    timestamp: Arc<Mutex<Timestamp>>,
     loops: Vec<StreamLoop<'a>>,
 }
 
@@ -18,7 +20,8 @@ impl<'a> MainLoop<'a> {
     pub fn new(options: output::Options) -> Self {
         Self {
             options,
-            timestamp: Timestamp::new(),
+            prefix_length: 0,
+            timestamp: Arc::new(Mutex::new(Timestamp::new())),
             loops: vec![],
         }
     }
@@ -29,6 +32,7 @@ impl<'a> MainLoop<'a> {
         output: &'a mut (dyn Write + Send),
         prefix: &str,
     ) {
+        self.prefix_length = std::cmp::max(self.prefix_length, prefix.len());
         let mut options = self.options.clone();
         options.prefix = prefix.to_string();
         self.loops.push(StreamLoop::new(
@@ -51,6 +55,16 @@ impl<'a> MainLoop<'a> {
                 t.join()
                     .expect("Thread reading tokens unexpectedly panicked")?;
             }
+
+            let timestamp_prefix =
+                output::timestamp::create_prefix(&self.timestamp, self.options.show_delta);
+            println!(
+                "{}{}{}: \u{2403}",
+                timestamp_prefix,
+                if self.prefix_length > 0 { " " } else { "" },
+                "-".repeat(self.prefix_length)
+            );
+
             Ok(())
         })
     }
@@ -66,7 +80,7 @@ impl<'a> StreamLoop<'a> {
     fn new(
         input_stream: &'a mut (dyn Read + Send),
         output_stream: &'a mut (dyn Write + Send),
-        timestamp: Timestamp,
+        timestamp: Arc<Mutex<Timestamp>>,
         output_options: output::Options,
     ) -> Self {
         Self {
