@@ -16,23 +16,26 @@ struct ProgramOptions {
     #[options(short = "d", help = "show delta time from previous line to stream")]
     show_delta: bool,
 
-    #[options(short = "c", help = "show control characters as unicode symbols")]
-    show_control: bool,
-
-    #[options(short = "e", help = "show ANSI escape sequences")]
-    show_escape: bool,
-
     #[options(
         short = "u",
         help = "enable microseconds in timestamps and delta times"
     )]
     micros: bool,
 
+    #[options(short = "c", help = "show control characters as unicode symbols")]
+    show_control: bool,
+
+    #[options(short = "e", help = "show ANSI escape sequences")]
+    show_escape: bool,
+
     #[options(short = "l", help = "disable line buffering when executing command")]
     no_line_buffering: bool,
 
-    #[options(help = "print help message")]
+    #[options(short = "h", help = "print help message and exit")]
     help: bool,
+
+    #[options(short = "v", help = "print version number and exit")]
+    version: bool,
 
     #[options(short = "t", help = "dump all tokens to stderr")]
     #[cfg(debug_assertions)]
@@ -137,6 +140,10 @@ fn main() {
     if let Ok(options) = ProgramOptions::parse_args(&args[1..], ParsingStyle::StopAtFirstFree) {
         if options.help_requested() {
             show_help(args[0].as_str());
+            return;
+        }
+        if options.version {
+            println!("linetime version {}", env!("CARGO_PKG_VERSION"));
             return;
         }
 
