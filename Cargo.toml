@@ -4,6 +4,16 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["Thomas Johannesson"]
+description = """
+Linetime is a command line utility to add timestamps at the start of lines. The tool can either
+process lines from stdin or execute a command and process lines from the command's stdout and stderr.
+"""
+documentation = "https://github.com/jordfras/linetime"
+homepage = "https://github.com/jordfras/linetime"
+repository = "https://github.com/jordfras/linetime"
+keywords = ["timestamp", "optimization", "bottleneck", "line"]
+categories = ["command-line-utilities", "date-and-time", "text-processing"]
+
 
 [dependencies]
 gumdrop = "0.8.1"
