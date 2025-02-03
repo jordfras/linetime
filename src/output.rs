@@ -53,7 +53,7 @@ impl<'a> Printer<'a> {
 
     pub fn print(&mut self, token: &Token) -> Result<(), std::io::Error> {
         if self.options.dump_tokens {
-            eprintln!("{:?}", token);
+            eprintln!("{token:?}");
         }
 
         if Self::causes_soft_break(token) {

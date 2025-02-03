@@ -10,7 +10,7 @@ pub struct Sequence {
 }
 
 /// The command an escape sequences represents, see
-/// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 for reference
+/// <https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797> for reference
 #[derive(Clone, Debug, PartialEq)]
 pub enum SequenceCommand {
     /// ESC[H
@@ -96,7 +96,7 @@ impl SequenceCommand {
         let captures = (*SEQUENCE_REGEX).captures(buffer)?;
         assert_eq!(4, captures.len());
 
-        if let Some(cap1) = captures.get(1) {
+        Some(if let Some(cap1) = captures.get(1) {
             assert_eq!(None, captures.get(2));
             assert_eq!(1, cap1.len());
             Self::without_bracket(cap1.as_str().chars().nth(0).unwrap())
@@ -104,7 +104,7 @@ impl SequenceCommand {
             let numbers = if let Some(numbers) = captures.get(2) {
                 numbers
                     .as_str()
-                    .split(";")
+                    .split(';')
                     .map(|s| s.parse::<u32>().unwrap())
                     .collect::<Vec<u32>>()
             } else {
@@ -113,23 +113,23 @@ impl SequenceCommand {
             let cap3 = captures.get(3).expect("Regex should find end character");
             assert_eq!(1, cap3.len());
             let c = cap3.as_str().chars().nth(0).unwrap();
-            Self::with_bracket(numbers, c)
-        }
+            Self::with_bracket(&numbers, c)
+        })
     }
 
     // Sequence like "ESC M" (without '[')
-    fn without_bracket(c: char) -> Option<Self> {
-        Some(match c {
+    fn without_bracket(c: char) -> Self {
+        match c {
             'M' => Self::CursorMoveUpOne,
             '7' => Self::CursorSavePosition,
             '8' => Self::CursorRestorePosition,
             _ => Self::Unhandled,
-        })
+        }
     }
 
     // Sequence with '[', like "ESC[17;42f"
-    fn with_bracket(numbers: Vec<u32>, c: char) -> Option<Self> {
-        Some(match numbers.len() {
+    fn with_bracket(numbers: &[u32], c: char) -> Self {
+        match numbers.len() {
             0 => match c {
                 'H' => Self::CursorMoveHome,
                 'J' => Self::EraseFromCursorToEndOfScreen,
@@ -176,7 +176,7 @@ impl SequenceCommand {
                 _ => Self::Unhandled,
             },
             _ => Self::Unhandled,
-        })
+        }
     }
 }
 

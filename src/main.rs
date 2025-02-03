@@ -16,23 +16,26 @@ struct ProgramOptions {
     #[options(short = "d", help = "show delta time from previous line to stream")]
     show_delta: bool,
 
-    #[options(short = "c", help = "show control characters as unicode symbols")]
-    show_control: bool,
-
-    #[options(short = "e", help = "show ANSI escape sequences")]
-    show_escape: bool,
-
     #[options(
         short = "u",
         help = "enable microseconds in timestamps and delta times"
     )]
     micros: bool,
 
+    #[options(short = "c", help = "show control characters as unicode symbols")]
+    show_control: bool,
+
+    #[options(short = "e", help = "show ANSI escape sequences")]
+    show_escape: bool,
+
     #[options(short = "l", help = "disable line buffering when executing command")]
     no_line_buffering: bool,
 
-    #[options(help = "print help message")]
+    #[options(short = "h", help = "print help message and exit")]
     help: bool,
+
+    #[options(short = "v", help = "print version number and exit")]
+    version: bool,
 
     #[options(short = "t", help = "dump all tokens to stderr")]
     #[cfg(debug_assertions)]
@@ -90,12 +93,12 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn run_main_loop(options: ProgramOptions) -> Result<()> {
+fn run_main_loop(options: &ProgramOptions) -> Result<()> {
     if options.command.is_empty() {
         let mut stdin = std::io::stdin();
         let mut stdout = std::io::stdout();
 
-        let mut main_loop = MainLoop::new((&options).into());
+        let mut main_loop = MainLoop::new(options.into());
         main_loop.add_stream(&mut stdin, &mut stdout, "");
         main_loop.run()?;
     } else {
@@ -121,7 +124,7 @@ fn run_main_loop(options: ProgramOptions) -> Result<()> {
         let mut command_stdout = command.stdout();
         let mut command_stderr = command.stderr();
 
-        let mut main_loop = MainLoop::new((&options).into());
+        let mut main_loop = MainLoop::new(options.into());
         main_loop.add_stream(&mut command_stdout, maybe_wrapped_stdout, "stdout");
         main_loop.add_stream(&mut command_stderr, maybe_wrapped_stderr, "stderr");
 
@@ -139,8 +142,12 @@ fn main() {
             show_help(args[0].as_str());
             return;
         }
+        if options.version {
+            println!("linetime version {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
 
-        if let Err(error) = run_main_loop(options) {
+        if let Err(error) = run_main_loop(&options) {
             eprintln!("{error}");
             std::process::exit(1);
         }

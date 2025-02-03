@@ -30,11 +30,9 @@ impl Write for LineWriteDecorator<'_> {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        // Lock mutex to ensure not writing lines to stdout and stderr at the same time
-        let _lock = self
-            .write_mutex
-            .lock()
-            .map_err(|_| "Could not lock write mutex, other thread panicked!");
+        // Lock mutex to ensure not writing lines to stdout and stderr at the same time. If the
+        // another thread panicked we proceed anyway.
+        let _lock = self.write_mutex.lock().ok();
         self.inner.write_all(self.buffer.as_slice())?;
         self.buffer.clear();
         self.inner.flush()
