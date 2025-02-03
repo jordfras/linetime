@@ -43,6 +43,12 @@ moving to a new line in the terminal, or simply carriage return. Many tools disa
 automatically when piping or executed from by another process which is not a terminal. Since this
 is not always the case, linetime tries to "unfold" lines that otherwise would have been overwritten.
 
+The unfolding can be demonstrated by running and comparing:
+```
+$ scripts/build_with_progress.sh
+$ linetime -- scripts/build_with_progress.sh
+```
+
 ## Installation
 Currently, you have to install your own Rust toolchain with
 [`rustup`](https://www.rust-lang.org/tools/install). Then you can install the program with `cargo`
