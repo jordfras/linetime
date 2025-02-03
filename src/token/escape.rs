@@ -10,7 +10,7 @@ pub struct Sequence {
 }
 
 /// The command an escape sequences represents, see
-/// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 for reference
+/// <https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797> for reference
 #[derive(Clone, Debug, PartialEq)]
 pub enum SequenceCommand {
     /// ESC[H
@@ -104,7 +104,7 @@ impl SequenceCommand {
             let numbers = if let Some(numbers) = captures.get(2) {
                 numbers
                     .as_str()
-                    .split(";")
+                    .split(';')
                     .map(|s| s.parse::<u32>().unwrap())
                     .collect::<Vec<u32>>()
             } else {
@@ -113,7 +113,7 @@ impl SequenceCommand {
             let cap3 = captures.get(3).expect("Regex should find end character");
             assert_eq!(1, cap3.len());
             let c = cap3.as_str().chars().nth(0).unwrap();
-            Self::with_bracket(numbers, c)
+            Self::with_bracket(&numbers, c)
         }
     }
 
@@ -128,7 +128,7 @@ impl SequenceCommand {
     }
 
     // Sequence with '[', like "ESC[17;42f"
-    fn with_bracket(numbers: Vec<u32>, c: char) -> Option<Self> {
+    fn with_bracket(numbers: &[u32], c: char) -> Option<Self> {
         Some(match numbers.len() {
             0 => match c {
                 'H' => Self::CursorMoveHome,

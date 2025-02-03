@@ -4,7 +4,7 @@ use std::io::Read;
 pub fn read_char(stream: &mut dyn Read) -> Result<Option<char>, std::io::Error> {
     let mut bytes: [u8; 4] = [0, 0, 0, 0];
     for i in 0..4 {
-        let x = &mut bytes[i..(i + 1)];
+        let x = &mut bytes[i..=i];
         let read_length = stream.read(x)?;
 
         if read_length != 1 {

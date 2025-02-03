@@ -93,12 +93,12 @@ fn show_help(program_name: &str) {
     println!("{}", ProgramOptions::usage());
 }
 
-fn run_main_loop(options: ProgramOptions) -> Result<()> {
+fn run_main_loop(options: &ProgramOptions) -> Result<()> {
     if options.command.is_empty() {
         let mut stdin = std::io::stdin();
         let mut stdout = std::io::stdout();
 
-        let mut main_loop = MainLoop::new((&options).into());
+        let mut main_loop = MainLoop::new(options.into());
         main_loop.add_stream(&mut stdin, &mut stdout, "");
         main_loop.run()?;
     } else {
@@ -124,7 +124,7 @@ fn run_main_loop(options: ProgramOptions) -> Result<()> {
         let mut command_stdout = command.stdout();
         let mut command_stderr = command.stderr();
 
-        let mut main_loop = MainLoop::new((&options).into());
+        let mut main_loop = MainLoop::new(options.into());
         main_loop.add_stream(&mut command_stdout, maybe_wrapped_stdout, "stdout");
         main_loop.add_stream(&mut command_stderr, maybe_wrapped_stderr, "stderr");
 
@@ -147,7 +147,7 @@ fn main() {
             return;
         }
 
-        if let Err(error) = run_main_loop(options) {
+        if let Err(error) = run_main_loop(&options) {
             eprintln!("{error}");
             std::process::exit(1);
         }
