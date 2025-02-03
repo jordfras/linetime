@@ -96,7 +96,7 @@ impl SequenceCommand {
         let captures = (*SEQUENCE_REGEX).captures(buffer)?;
         assert_eq!(4, captures.len());
 
-        if let Some(cap1) = captures.get(1) {
+        Some(if let Some(cap1) = captures.get(1) {
             assert_eq!(None, captures.get(2));
             assert_eq!(1, cap1.len());
             Self::without_bracket(cap1.as_str().chars().nth(0).unwrap())
@@ -114,22 +114,22 @@ impl SequenceCommand {
             assert_eq!(1, cap3.len());
             let c = cap3.as_str().chars().nth(0).unwrap();
             Self::with_bracket(&numbers, c)
-        }
+        })
     }
 
     // Sequence like "ESC M" (without '[')
-    fn without_bracket(c: char) -> Option<Self> {
-        Some(match c {
+    fn without_bracket(c: char) -> Self {
+        match c {
             'M' => Self::CursorMoveUpOne,
             '7' => Self::CursorSavePosition,
             '8' => Self::CursorRestorePosition,
             _ => Self::Unhandled,
-        })
+        }
     }
 
     // Sequence with '[', like "ESC[17;42f"
-    fn with_bracket(numbers: &[u32], c: char) -> Option<Self> {
-        Some(match numbers.len() {
+    fn with_bracket(numbers: &[u32], c: char) -> Self {
+        match numbers.len() {
             0 => match c {
                 'H' => Self::CursorMoveHome,
                 'J' => Self::EraseFromCursorToEndOfScreen,
@@ -176,7 +176,7 @@ impl SequenceCommand {
                 _ => Self::Unhandled,
             },
             _ => Self::Unhandled,
-        })
+        }
     }
 }
 
