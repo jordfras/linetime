@@ -31,9 +31,9 @@ code is not 0, the text `"The command exited with code 1"` or similar will be pr
 
 The output from the command is printed to stdout and stderr respectively, as read from the command.
 In addition to the timestamp, each line is prefixed with the name of the output file. To avoid
-interleaving output from stdout and stderr from an executed command, the output is buffered and
-printed first when a complete line is read. This behavior can be disabled with
- `--no-line-buffering` or `-l`, in which case characters are printed as soon as they are read.
+interleaving output from stdout and stderr, the output is buffered and printed first when a complete
+line is read. This behavior can be disabled with `--no-line-buffering` or `-l`, in which case
+characters are printed as soon as they are read.
 
 See help text, `-h` or `--help`, for a complete list of options.
 
