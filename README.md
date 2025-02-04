@@ -2,9 +2,9 @@
 
 Linetime is a command line utility to add timestamps at the start of lines. The tool can either
 process lines from stdin or execute a command and process lines from the command's stdout and
-stderr. Unlike the `time` utility, this can be used to wrap a complete script to find bottle necks.
+stderr. It can, for instance, be useful to find performance bottle necks in a script.
 
-## Basic Usage
+## Usage
 Piping to stdin:
 ```
 $ ls -l | linetime
@@ -37,24 +37,28 @@ characters are printed as soon as they are read.
 
 See help text, `-h` or `--help`, for a complete list of options.
 
-## Escape Sequences
-Some tools use ANSI escape sequences (moving the cursor or erasing lines) to show progress without
-moving to a new line in the terminal, or simply carriage return. Many tools disable this behavior
-automatically when piping or executed from by another process which is not a terminal. Since this
-is not always the case, linetime tries to "unfold" lines that otherwise would have been overwritten.
+## Unfolding
+Some tools show progress without starting a new line in the terminal. The cursor is moved or lines
+are erased by printing carriage return and/or ANSI escape sequences. Many tools disable this
+behavior automatically when piping or executed by another process. Not all tools are this
+well-behaved so linetime tries to "unfold" lines that otherwise would have been overwritten.
 
-The unfolding can be demonstrated by running and comparing:
+Unfolding of output from `cargo` can be demonstrated if you clone the linetime git repository,
+perform a release build and run a demonstration script: 
 ```
-$ scripts/build_with_progress.sh
-$ linetime -- scripts/build_with_progress.sh
+# Make a release build first to allow script to use a release binary.
+$ cargo build --release
+
+# Demonstration script builds linetime twice, with and without piping output to linetime.
+$ scripts/demo_unfolding.sh
 ```
 
 ## Installation
 Currently, you have to install your own Rust toolchain with
-[`rustup`](https://www.rust-lang.org/tools/install). Then you can install the program with `cargo`
-in the repository root:
+[`rustup`](https://www.rust-lang.org/tools/install). Then you can download, build and install the
+program with a single `cargo` command:
 ```
-$ cargo install --path .
+$ cargo install linetime
 ```
 
 ## FAQ
