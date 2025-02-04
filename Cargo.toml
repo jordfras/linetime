@@ -1,6 +1,6 @@
 [package]
 name = "linetime"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 license = "MIT"
 authors = ["Thomas Johannesson"]
@@ -13,11 +13,7 @@ homepage = "https://github.com/jordfras/linetime"
 repository = "https://github.com/jordfras/linetime"
 keywords = ["timestamp", "optimization", "bottleneck", "line"]
 categories = ["command-line-utilities", "date-and-time", "text-processing"]
-
-exclude = [
-  "/.github/",
-  "/scripts/",
-]
+exclude = ["/.github/", "/scripts/"]
 
 [dependencies]
 gumdrop = "0.8.1"
