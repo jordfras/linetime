@@ -106,12 +106,12 @@ fn subsec_length(microseconds: bool) -> usize {
     }
 }
 
-/// The string length of a single duration string
+/// The string length of a single duration string, when no hour field is present
 fn duration_length(microseconds: bool) -> usize {
     2 + 1 + 2 + 1 + subsec_length(microseconds)
 }
 
-/// The string length of a complete timestamp string
+/// The string length of a complete timestamp string, when no hour field is present
 fn stamp_length(with_delta: bool, microseconds: bool) -> usize {
     if with_delta {
         duration_length(microseconds) * 2 + 3
@@ -121,53 +121,73 @@ fn stamp_length(with_delta: bool, microseconds: bool) -> usize {
 }
 
 fn format(duration: Duration, microseconds: bool) -> String {
-    if microseconds {
-        format!(
-            "{:0>2}:{:0>2}.{:0>6}",
-            duration.as_secs() / 60,
-            duration.as_secs() % 60,
-            duration.subsec_micros()
-        )
-    } else {
-        format!(
-            "{:0>2}:{:0>2}.{:0>3}",
-            duration.as_secs() / 60,
-            duration.as_secs() % 60,
-            duration.subsec_millis()
-        )
+    let mut s = String::with_capacity(20);
+    let hours = duration.as_secs() / (60 * 60);
+    let minutes = duration.as_secs() / 60 % 60;
+    let seconds = duration.as_secs() % 60;
+    if hours > 0 {
+        s.push_str(format!("{:0>2}:", hours).as_str());
     }
+    s.push_str(format!("{:0>2}:{:0>2}.", minutes, seconds).as_str());
+
+    if microseconds {
+        s.push_str(format!("{:0>6}", duration.subsec_micros()).as_str());
+    } else {
+        s.push_str(format!("{:0>3}", duration.subsec_millis()).as_str());
+    }
+    s
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn us(micros: u64) -> Duration {
+        Duration::from_micros(micros)
+    }
+
+    fn ms(millis: u64) -> Duration {
+        Duration::from_millis(millis)
+    }
+
+    fn secs(seconds: u64) -> Duration {
+        Duration::from_secs(seconds)
+    }
+
+    fn mins(minutes: u64) -> Duration {
+        Duration::from_secs(minutes * 60)
+    }
+
+    fn hours(hours: u64) -> Duration {
+        Duration::from_secs(hours * 60 * 60)
+    }
+
     #[test]
     fn get_returns_expected_stamps_in_order() {
         let mut t = Timestamp::new();
-        t.expect_get(Duration::from_millis(1234));
-        t.expect_get(Duration::from_millis(2345));
+        t.expect_get(ms(1234));
+        t.expect_get(ms(2345));
 
-        assert_eq!(Duration::from_millis(1234), t.get());
-        assert_eq!(Duration::from_millis(2345), t.get());
+        assert_eq!(ms(1234), t.get());
+        assert_eq!(ms(2345), t.get());
     }
 
     #[test]
     fn previous_returns_previously_gotten_stamp() {
         let mut t = Timestamp::new();
-        t.expect_get(Duration::from_millis(1234));
-        t.expect_get(Duration::from_millis(2345));
+        t.expect_get(ms(1234));
+        t.expect_get(ms(2345));
 
         assert_eq!(None, t.previous());
         assert_eq!(None, t.previous());
 
-        assert_eq!(Duration::from_millis(1234), t.get());
-        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
-        assert_eq!(Some(Duration::from_millis(1234)), t.previous());
+        assert_eq!(ms(1234), t.get());
+        assert_eq!(Some(ms(1234)), t.previous());
+        assert_eq!(Some(ms(1234)), t.previous());
 
-        assert_eq!(Duration::from_millis(2345), t.get());
-        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
-        assert_eq!(Some(Duration::from_millis(2345)), t.previous());
+        assert_eq!(ms(2345), t.get());
+        assert_eq!(Some(ms(2345)), t.previous());
+        assert_eq!(Some(ms(2345)), t.previous());
     }
 
     #[test]
@@ -181,7 +201,26 @@ mod tests {
     #[should_panic(expected = "All expected timestamps where not requested: [1.234s]")]
     fn not_getting_all_timestamps_panics_when_checked() {
         let mut t = Timestamp::new();
-        t.expect_get(Duration::from_millis(1234));
+        t.expect_get(ms(1234));
         t.assert_all_used();
+    }
+
+    #[test]
+    fn format_duration_with_millisecond_precision() {
+        assert_eq!("00:00.000", format(Duration::ZERO, false));
+        assert_eq!("12:34.567", format(mins(12) + secs(34) + ms(567), false));
+        assert_eq!("10:00:00.000", format(hours(10), false));
+        assert_eq!("240:17:00.000", format(hours(240) + mins(17), false));
+    }
+
+    #[test]
+    fn format_duration_with_microsecond_precision() {
+        assert_eq!("00:00.000000", format(Duration::ZERO, true));
+        assert_eq!(
+            "12:34.567891",
+            format(mins(12) + secs(34) + us(567891), true)
+        );
+        assert_eq!("10:00:00.000000", format(hours(10), true));
+        assert_eq!("240:17:00.000000", format(hours(240) + mins(17), true));
     }
 }
