@@ -114,14 +114,14 @@ fn format(duration: Duration, microseconds: bool) -> String {
     let minutes = duration.as_secs() / 60 % 60;
     let seconds = duration.as_secs() % 60;
     if hours > 0 {
-        s.push_str(format!("{:0>2}:", hours).as_str());
+        s += format!("{:0>2}:", hours).as_str();
     }
-    s.push_str(format!("{:0>2}:{:0>2}.", minutes, seconds).as_str());
+    s += format!("{:0>2}:{:0>2}.", minutes, seconds).as_str();
 
     if microseconds {
-        s.push_str(format!("{:0>6}", duration.subsec_micros()).as_str());
+        s += format!("{:0>6}", duration.subsec_micros()).as_str();
     } else {
-        s.push_str(format!("{:0>3}", duration.subsec_millis()).as_str());
+        s += format!("{:0>3}", duration.subsec_millis()).as_str();
     }
     s
 }
