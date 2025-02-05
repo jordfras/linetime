@@ -16,45 +16,23 @@ pub struct Timestamp {
     expected_stamps: VecDeque<Duration>,
 }
 
-#[cfg(not(test))]
 impl Timestamp {
     pub fn new() -> Self {
         Self {
             previous_time: None,
+            #[cfg(not(test))]
             start_time: SystemTime::now(),
-        }
-    }
-
-    pub fn get(&mut self) -> Duration {
-        let t = SystemTime::now()
-            .duration_since(self.start_time)
-            .expect("Start time should be earlier than get");
-        self.previous_time = Some(t);
-        t
-    }
-}
-
-impl Timestamp {
-    pub fn previous(&self) -> Option<Duration> {
-        self.previous_time
-    }
-}
-
-#[cfg(test)]
-// Fake implementation for unit testing
-impl Timestamp {
-    pub fn new() -> Self {
-        Self {
-            previous_time: None,
+            #[cfg(test)]
             expected_stamps: VecDeque::new(),
         }
     }
 
-    pub fn expect_get(&mut self, stamp: Duration) {
-        self.expected_stamps.push_back(stamp);
-    }
-
     pub fn get(&mut self) -> Duration {
+        #[cfg(not(test))]
+        let t = SystemTime::now()
+            .duration_since(self.start_time)
+            .expect("Start time should be earlier than get");
+        #[cfg(test)]
         let t = self
             .expected_stamps
             .pop_front()
@@ -63,6 +41,16 @@ impl Timestamp {
         t
     }
 
+    pub fn previous(&self) -> Option<Duration> {
+        self.previous_time
+    }
+
+    #[cfg(test)]
+    pub fn expect_get(&mut self, stamp: Duration) {
+        self.expected_stamps.push_back(stamp);
+    }
+
+    #[cfg(test)]
     pub fn assert_all_used(&self) {
         assert!(
             self.expected_stamps.is_empty(),

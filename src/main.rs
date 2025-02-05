@@ -53,7 +53,6 @@ struct ProgramOptions {
 }
 
 impl From<&ProgramOptions> for output::Options {
-    #[cfg(debug_assertions)]
     fn from(options: &ProgramOptions) -> Self {
         Self {
             show_delta: options.show_delta,
@@ -61,19 +60,13 @@ impl From<&ProgramOptions> for output::Options {
             prefix: String::new(),
             show_control: options.show_control,
             show_escape: options.show_escape,
+            #[cfg(debug_assertions)]
             dump_tokens: options.dump_tokens,
-            flush_all: options.flush_all,
-        }
-    }
-    #[cfg(not(debug_assertions))]
-    fn from(options: &ProgramOptions) -> Self {
-        Self {
-            show_delta: options.show_delta,
-            microseconds: options.micros,
-            prefix: String::new(),
-            show_control: options.show_control,
-            show_escape: options.show_escape,
+            #[cfg(not(debug_assertions))]
             dump_tokens: false,
+            #[cfg(debug_assertions)]
+            flush_all: options.flush_all,
+            #[cfg(not(debug_assertions))]
             flush_all: false,
         }
     }
