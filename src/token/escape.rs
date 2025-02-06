@@ -13,48 +13,62 @@ pub struct Sequence {
 /// <https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797> for reference
 #[derive(Clone, Debug, PartialEq)]
 pub enum SequenceCommand {
-    /// ESC[H
-    CursorMoveHome,
-    /// ESC[#;#H or ESC[#;#f
-    CursorMoveToLineAndColumn((u32, u32)),
-    /// ESC[#A
-    CursorMoveLinesUp(u32),
-    /// ESC[#B
-    CursorMoveLinesDown(u32),
-    /// ESC[#C
-    CursorMoveColumnsRight(u32),
-    /// ESC[#D
-    CursorMoveColumnsLeft(u32),
-    /// ESC[#E
-    CursorMoveBeginningLinesDown(u32),
-    /// ESC[#F
-    CursorMoveBeginningLinesUp(u32),
-    /// ESC[#G
-    CursorMoveToColumn(u32),
-    /// ESC[6n
-    CursorRequestPosition,
-    /// ESC M
-    CursorMoveUpOne,
-    /// ESC 7 or ESC[s
-    CursorSavePosition,
-    /// ESC 8 or ESC[u
-    CursorRestorePosition,
-    /// ESC[J or ESC[0J
-    EraseFromCursorToEndOfScreen,
-    /// ESC[1J
-    EraseFromBeginningOfScreenToCursor,
-    /// ESC[2J
-    EraseEntireScreen,
-    /// ESC[3J
-    EraseSavedLines,
-    /// ESC[K or ESC[0K
-    EraseFromCursorToEndOfLine,
-    /// ESC[1K
-    EraseFromStartOfLineToCursor,
-    /// ESC[2K
-    EraseEntireLine,
-    /// Escape sequences unrelated to moving or erasing
+    CursorMove(CursorMove),
+    CursorPosition(CursorPosition),
+    Erase(Erase),
     Unhandled,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CursorMove {
+    /// ESC[H
+    Home,
+    /// ESC[#;#H or ESC[#;#f
+    ToLineAndColumn((u32, u32)),
+    /// ESC[#A
+    LinesUp(u32),
+    /// ESC[#B
+    LinesDown(u32),
+    /// ESC[#C
+    ColumnsRight(u32),
+    /// ESC[#D
+    ColumnsLeft(u32),
+    /// ESC[#E
+    BeginningLinesDown(u32),
+    /// ESC[#F
+    BeginningLinesUp(u32),
+    /// ESC[#G
+    ToColumn(u32),
+    /// ESC M
+    UpOne,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CursorPosition {
+    /// ESC[6n
+    Request,
+    /// ESC 7 or ESC[s
+    Save,
+    /// ESC 8 or ESC[u
+    Restore,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Erase {
+    /// ESC[J or ESC[0J
+    FromCursorToEndOfScreen,
+    /// ESC[1J
+    FromBeginningOfScreenToCursor,
+    /// ESC[2J
+    EntireScreen,
+    /// ESC[3J
+    SavedLines,
+    /// ESC[K or ESC[0K
+    FromCursorToEndOfLine,
+    /// ESC[1K
+    FromStartOfLineToCursor,
+    /// ESC[2K
+    EntireLine,
 }
 
 /// The escape character
@@ -120,9 +134,9 @@ impl SequenceCommand {
     // Sequence like "ESC M" (without '[')
     fn without_bracket(c: char) -> Self {
         match c {
-            'M' => Self::CursorMoveUpOne,
-            '7' => Self::CursorSavePosition,
-            '8' => Self::CursorRestorePosition,
+            'M' => Self::CursorMove(CursorMove::UpOne),
+            '7' => Self::CursorPosition(CursorPosition::Save),
+            '8' => Self::CursorPosition(CursorPosition::Restore),
             _ => Self::Unhandled,
         }
     }
@@ -131,39 +145,39 @@ impl SequenceCommand {
     fn with_bracket(numbers: &[u32], c: char) -> Self {
         match numbers.len() {
             0 => match c {
-                'H' => Self::CursorMoveHome,
-                'J' => Self::EraseFromCursorToEndOfScreen,
-                'K' => Self::EraseFromCursorToEndOfLine,
-                's' => Self::CursorSavePosition,
-                'u' => Self::CursorRestorePosition,
+                'H' => Self::CursorMove(CursorMove::Home),
+                'J' => Self::Erase(Erase::FromCursorToEndOfScreen),
+                'K' => Self::Erase(Erase::FromCursorToEndOfLine),
+                's' => Self::CursorPosition(CursorPosition::Save),
+                'u' => Self::CursorPosition(CursorPosition::Restore),
                 _ => Self::Unhandled,
             },
             1 => {
                 let number = numbers[0];
                 match c {
-                    'A' => Self::CursorMoveLinesUp(number),
-                    'B' => Self::CursorMoveLinesDown(number),
-                    'C' => Self::CursorMoveColumnsRight(number),
-                    'D' => Self::CursorMoveColumnsLeft(number),
-                    'E' => Self::CursorMoveBeginningLinesUp(number),
-                    'F' => Self::CursorMoveBeginningLinesDown(number),
-                    'G' => Self::CursorMoveToColumn(number),
+                    'A' => Self::CursorMove(CursorMove::LinesUp(number)),
+                    'B' => Self::CursorMove(CursorMove::LinesDown(number)),
+                    'C' => Self::CursorMove(CursorMove::ColumnsRight(number)),
+                    'D' => Self::CursorMove(CursorMove::ColumnsLeft(number)),
+                    'E' => Self::CursorMove(CursorMove::BeginningLinesUp(number)),
+                    'F' => Self::CursorMove(CursorMove::BeginningLinesDown(number)),
+                    'G' => Self::CursorMove(CursorMove::ToColumn(number)),
                     'J' => match number {
-                        0 => Self::EraseFromCursorToEndOfScreen,
-                        1 => Self::EraseFromBeginningOfScreenToCursor,
-                        2 => Self::EraseEntireScreen,
-                        3 => Self::EraseSavedLines,
+                        0 => Self::Erase(Erase::FromCursorToEndOfScreen),
+                        1 => Self::Erase(Erase::FromBeginningOfScreenToCursor),
+                        2 => Self::Erase(Erase::EntireScreen),
+                        3 => Self::Erase(Erase::SavedLines),
                         _ => Self::Unhandled,
                     },
                     'K' => match number {
-                        0 => Self::EraseFromCursorToEndOfLine,
-                        1 => Self::EraseFromStartOfLineToCursor,
-                        2 => Self::EraseEntireLine,
+                        0 => Self::Erase(Erase::FromCursorToEndOfLine),
+                        1 => Self::Erase(Erase::FromStartOfLineToCursor),
+                        2 => Self::Erase(Erase::EntireLine),
                         _ => Self::Unhandled,
                     },
                     'n' => {
                         if number == 6 {
-                            Self::CursorRequestPosition
+                            Self::CursorPosition(CursorPosition::Request)
                         } else {
                             Self::Unhandled
                         }
@@ -172,7 +186,9 @@ impl SequenceCommand {
                 }
             }
             2 => match c {
-                'f' | 'H' => Self::CursorMoveToLineAndColumn((numbers[0], numbers[1])),
+                'f' | 'H' => {
+                    Self::CursorMove(CursorMove::ToLineAndColumn((numbers[0], numbers[1])))
+                }
                 _ => Self::Unhandled,
             },
             _ => Self::Unhandled,
@@ -221,47 +237,92 @@ mod tests {
 
     #[test]
     fn match_escape_returns_correct_escape_sequences() {
-        assert_esc!(SequenceCommand::CursorMoveUpOne, esc!("M"));
-        assert_esc!(SequenceCommand::CursorSavePosition, esc!("7"));
-        assert_esc!(SequenceCommand::CursorRestorePosition, esc!("8"));
-        assert_esc!(SequenceCommand::CursorMoveHome, esc!("[H"));
-        assert_esc!(SequenceCommand::CursorSavePosition, esc!("[s"));
-        assert_esc!(SequenceCommand::CursorRestorePosition, esc!("[u"));
-
-        assert_esc!(SequenceCommand::CursorMoveLinesUp(17), esc!("[17A"));
-        assert_esc!(SequenceCommand::CursorMoveLinesDown(18), esc!("[18B"));
-        assert_esc!(SequenceCommand::CursorMoveColumnsRight(19), esc!("[19C"));
-        assert_esc!(SequenceCommand::CursorMoveColumnsLeft(20), esc!("[20D"));
+        assert_esc!(SequenceCommand::CursorMove(CursorMove::UpOne), esc!("M"));
         assert_esc!(
-            SequenceCommand::CursorMoveBeginningLinesUp(21),
+            SequenceCommand::CursorPosition(CursorPosition::Save),
+            esc!("7")
+        );
+        assert_esc!(
+            SequenceCommand::CursorPosition(CursorPosition::Restore),
+            esc!("8")
+        );
+        assert_esc!(SequenceCommand::CursorMove(CursorMove::Home), esc!("[H"));
+        assert_esc!(
+            SequenceCommand::CursorPosition(CursorPosition::Save),
+            esc!("[s")
+        );
+        assert_esc!(
+            SequenceCommand::CursorPosition(CursorPosition::Restore),
+            esc!("[u")
+        );
+
+        assert_esc!(
+            SequenceCommand::CursorMove(CursorMove::LinesUp(17)),
+            esc!("[17A")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMove(CursorMove::LinesDown(18)),
+            esc!("[18B")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMove(CursorMove::ColumnsRight(19)),
+            esc!("[19C")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMove(CursorMove::ColumnsLeft(20)),
+            esc!("[20D")
+        );
+        assert_esc!(
+            SequenceCommand::CursorMove(CursorMove::BeginningLinesUp(21)),
             esc!("[21E")
         );
         assert_esc!(
-            SequenceCommand::CursorMoveBeginningLinesDown(22),
+            SequenceCommand::CursorMove(CursorMove::BeginningLinesDown(22)),
             esc!("[22F")
         );
-        assert_esc!(SequenceCommand::CursorMoveToColumn(23), esc!("[23G"));
-        assert_esc!(SequenceCommand::CursorRequestPosition, esc!("[6n"));
-
-        assert_esc!(SequenceCommand::EraseFromCursorToEndOfScreen, esc!("[J"));
-        assert_esc!(SequenceCommand::EraseFromCursorToEndOfScreen, esc!("[0J"));
         assert_esc!(
-            SequenceCommand::EraseFromBeginningOfScreenToCursor,
+            SequenceCommand::CursorMove(CursorMove::ToColumn(23)),
+            esc!("[23G")
+        );
+        assert_esc!(
+            SequenceCommand::CursorPosition(CursorPosition::Request),
+            esc!("[6n")
+        );
+
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromCursorToEndOfScreen),
+            esc!("[J")
+        );
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromCursorToEndOfScreen),
+            esc!("[0J")
+        );
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromBeginningOfScreenToCursor),
             esc!("[1J")
         );
-        assert_esc!(SequenceCommand::EraseEntireScreen, esc!("[2J"));
-        assert_esc!(SequenceCommand::EraseSavedLines, esc!("[3J"));
-        assert_esc!(SequenceCommand::EraseFromCursorToEndOfLine, esc!("[K"));
-        assert_esc!(SequenceCommand::EraseFromCursorToEndOfLine, esc!("[0K"));
-        assert_esc!(SequenceCommand::EraseFromStartOfLineToCursor, esc!("[1K"));
-        assert_esc!(SequenceCommand::EraseEntireLine, esc!("[2K"));
+        assert_esc!(SequenceCommand::Erase(Erase::EntireScreen), esc!("[2J"));
+        assert_esc!(SequenceCommand::Erase(Erase::SavedLines), esc!("[3J"));
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromCursorToEndOfLine),
+            esc!("[K")
+        );
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromCursorToEndOfLine),
+            esc!("[0K")
+        );
+        assert_esc!(
+            SequenceCommand::Erase(Erase::FromStartOfLineToCursor),
+            esc!("[1K")
+        );
+        assert_esc!(SequenceCommand::Erase(Erase::EntireLine), esc!("[2K"));
 
         assert_esc!(
-            SequenceCommand::CursorMoveToLineAndColumn((17, 42)),
+            SequenceCommand::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
             esc!("[17;42H")
         );
         assert_esc!(
-            SequenceCommand::CursorMoveToLineAndColumn((17, 42)),
+            SequenceCommand::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
             esc!("[17;42f")
         );
     }

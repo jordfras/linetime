@@ -101,6 +101,7 @@ mod tests {
     use super::*;
 
     type Command = escape::SequenceCommand;
+    type CursorMove = escape::CursorMove;
 
     // Creates a string slice just containing an ANSI escape sequence
     macro_rules! stream {
@@ -161,7 +162,10 @@ mod tests {
     fn sole_escape_sequence_is_tokenized_as_such() {
         let mut stream = stream!("\x1b[H");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
-        assert_next!(tokenizer, esc_token!(Command::CursorMoveHome, "\x1b[H"));
+        assert_next!(
+            tokenizer,
+            esc_token!(Command::CursorMove(CursorMove::Home), "\x1b[H")
+        );
         assert_next!(tokenizer, Token::EndOfFile);
     }
 
@@ -169,8 +173,14 @@ mod tests {
     fn consecutive_escape_sequences_are_tokenized_as_such() {
         let mut stream = stream!("\x1b[H\x1bM");
         let mut tokenizer = SerialTokenizer::new(&mut stream);
-        assert_next!(tokenizer, esc_token!(Command::CursorMoveHome, "\x1b[H"));
-        assert_next!(tokenizer, esc_token!(Command::CursorMoveUpOne, "\x1bM"));
+        assert_next!(
+            tokenizer,
+            esc_token!(Command::CursorMove(CursorMove::Home), "\x1b[H")
+        );
+        assert_next!(
+            tokenizer,
+            esc_token!(Command::CursorMove(CursorMove::UpOne), "\x1bM")
+        );
         assert_next!(tokenizer, Token::EndOfFile);
     }
 
@@ -181,7 +191,10 @@ mod tests {
         assert_next!(tokenizer, Token::Char('1'));
         assert_next!(
             tokenizer,
-            esc_token!(Command::CursorMoveToLineAndColumn((17, 42)), "\x1b[17;42f")
+            esc_token!(
+                Command::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
+                "\x1b[17;42f"
+            )
         );
         assert_next!(tokenizer, Token::Char('2'));
         assert_next!(tokenizer, Token::EndOfFile);

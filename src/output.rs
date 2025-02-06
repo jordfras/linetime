@@ -315,7 +315,7 @@ mod tests {
         printer.print(&Token::CarriageReturn).unwrap();
         printer
             .print(&esc_token!(
-                escape::SequenceCommand::EraseFromCursorToEndOfLine,
+                escape::SequenceCommand::Erase(escape::Erase::FromCursorToEndOfLine),
                 "\x1b[K"
             ))
             .unwrap();
@@ -336,7 +336,7 @@ mod tests {
         printer.print(&Token::Char('A')).unwrap();
         printer
             .print(&esc_token!(
-                escape::SequenceCommand::EraseEntireLine,
+                escape::SequenceCommand::Erase(escape::Erase::EntireLine),
                 "\x1b[2K"
             ))
             .unwrap();
@@ -450,7 +450,7 @@ mod tests {
         printer.print(&Token::Char('A')).unwrap();
         printer
             .print(&esc_token!(
-                escape::SequenceCommand::EraseEntireLine,
+                escape::SequenceCommand::Erase(escape::Erase::EntireLine),
                 "\x1b[2K"
             ))
             .unwrap();
