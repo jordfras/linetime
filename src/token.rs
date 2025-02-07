@@ -179,7 +179,7 @@ mod tests {
         );
         assert_next!(
             tokenizer,
-            esc_token!(Command::CursorMove(CursorMove::UpOne), "\x1bM")
+            esc_token!(Command::CursorMove(CursorMove::Up(1)), "\x1bM")
         );
         assert_next!(tokenizer, Token::EndOfFile);
     }
@@ -192,7 +192,10 @@ mod tests {
         assert_next!(
             tokenizer,
             esc_token!(
-                Command::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
+                Command::CursorMove(CursorMove::To {
+                    line: 17,
+                    column: 42
+                }),
                 "\x1b[17;42f"
             )
         );

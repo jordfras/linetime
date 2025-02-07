@@ -24,23 +24,21 @@ pub enum CursorMove {
     /// ESC[H
     Home,
     /// ESC[#;#H or ESC[#;#f
-    ToLineAndColumn((u32, u32)),
-    /// ESC[#A
-    LinesUp(u32),
+    To { line: u32, column: u32 },
+    /// ESC[#A, ESC M (up one)
+    Up(u32),
     /// ESC[#B
-    LinesDown(u32),
+    Down(u32),
     /// ESC[#C
-    ColumnsRight(u32),
+    Right(u32),
     /// ESC[#D
-    ColumnsLeft(u32),
+    Left(u32),
     /// ESC[#E
-    BeginningLinesDown(u32),
+    BeginningDown(u32),
     /// ESC[#F
-    BeginningLinesUp(u32),
+    BeginningUp(u32),
     /// ESC[#G
     ToColumn(u32),
-    /// ESC M
-    UpOne,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -134,7 +132,7 @@ impl SequenceCommand {
     // Sequence like "ESC M" (without '[')
     fn without_bracket(c: char) -> Self {
         match c {
-            'M' => Self::CursorMove(CursorMove::UpOne),
+            'M' => Self::CursorMove(CursorMove::Up(1)),
             '7' => Self::CursorPosition(CursorPosition::Save),
             '8' => Self::CursorPosition(CursorPosition::Restore),
             _ => Self::Unhandled,
@@ -155,12 +153,12 @@ impl SequenceCommand {
             1 => {
                 let number = numbers[0];
                 match c {
-                    'A' => Self::CursorMove(CursorMove::LinesUp(number)),
-                    'B' => Self::CursorMove(CursorMove::LinesDown(number)),
-                    'C' => Self::CursorMove(CursorMove::ColumnsRight(number)),
-                    'D' => Self::CursorMove(CursorMove::ColumnsLeft(number)),
-                    'E' => Self::CursorMove(CursorMove::BeginningLinesUp(number)),
-                    'F' => Self::CursorMove(CursorMove::BeginningLinesDown(number)),
+                    'A' => Self::CursorMove(CursorMove::Up(number)),
+                    'B' => Self::CursorMove(CursorMove::Down(number)),
+                    'C' => Self::CursorMove(CursorMove::Right(number)),
+                    'D' => Self::CursorMove(CursorMove::Left(number)),
+                    'E' => Self::CursorMove(CursorMove::BeginningUp(number)),
+                    'F' => Self::CursorMove(CursorMove::BeginningDown(number)),
                     'G' => Self::CursorMove(CursorMove::ToColumn(number)),
                     'J' => match number {
                         0 => Self::Erase(Erase::FromCursorToEndOfScreen),
@@ -186,9 +184,10 @@ impl SequenceCommand {
                 }
             }
             2 => match c {
-                'f' | 'H' => {
-                    Self::CursorMove(CursorMove::ToLineAndColumn((numbers[0], numbers[1])))
-                }
+                'f' | 'H' => Self::CursorMove(CursorMove::To {
+                    line: numbers[0],
+                    column: numbers[1],
+                }),
                 _ => Self::Unhandled,
             },
             _ => Self::Unhandled,
@@ -237,7 +236,7 @@ mod tests {
 
     #[test]
     fn match_escape_returns_correct_escape_sequences() {
-        assert_esc!(SequenceCommand::CursorMove(CursorMove::UpOne), esc!("M"));
+        assert_esc!(SequenceCommand::CursorMove(CursorMove::Up(1)), esc!("M"));
         assert_esc!(
             SequenceCommand::CursorPosition(CursorPosition::Save),
             esc!("7")
@@ -257,27 +256,27 @@ mod tests {
         );
 
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::LinesUp(17)),
+            SequenceCommand::CursorMove(CursorMove::Up(17)),
             esc!("[17A")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::LinesDown(18)),
+            SequenceCommand::CursorMove(CursorMove::Down(18)),
             esc!("[18B")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::ColumnsRight(19)),
+            SequenceCommand::CursorMove(CursorMove::Right(19)),
             esc!("[19C")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::ColumnsLeft(20)),
+            SequenceCommand::CursorMove(CursorMove::Left(20)),
             esc!("[20D")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::BeginningLinesUp(21)),
+            SequenceCommand::CursorMove(CursorMove::BeginningUp(21)),
             esc!("[21E")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::BeginningLinesDown(22)),
+            SequenceCommand::CursorMove(CursorMove::BeginningDown(22)),
             esc!("[22F")
         );
         assert_esc!(
@@ -318,11 +317,17 @@ mod tests {
         assert_esc!(SequenceCommand::Erase(Erase::EntireLine), esc!("[2K"));
 
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
+            SequenceCommand::CursorMove(CursorMove::To {
+                line: 17,
+                column: 42
+            }),
             esc!("[17;42H")
         );
         assert_esc!(
-            SequenceCommand::CursorMove(CursorMove::ToLineAndColumn((17, 42))),
+            SequenceCommand::CursorMove(CursorMove::To {
+                line: 17,
+                column: 42
+            }),
             esc!("[17;42f")
         );
     }
