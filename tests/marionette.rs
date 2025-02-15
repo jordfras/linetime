@@ -1,7 +1,9 @@
 use actix_web::http::header::ContentType;
 use actix_web::{dev, web, App, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
-use std::{env, io::Write, sync::Mutex};
+use std::{env, io::Write, sync::Mutex, time::Duration};
+use tokio::io::{self, AsyncBufReadExt, BufReader};
+use tokio::time::timeout;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -27,6 +29,7 @@ async fn main() {
                 .route("/ping", web::post().to(ping))
                 .route("/stdout", web::post().to(stdout))
                 .route("/stderr", web::post().to(stderr))
+                .route("/stdin", web::get().to(stdin))
         }
     })
     .bind(("localhost", port))
@@ -84,6 +87,9 @@ async fn page() -> HttpResponse {
               <input type="text" name="text"/>
               <button type="submit">Stderr</button>
             </form>
+            <form action="/stdin" method="get">
+              <button type="submit">Stdin</button>
+            </form>
         "#,
     )
 }
@@ -130,6 +136,23 @@ async fn stderr(parameters: web::Form<PrintParameters>) -> HttpResponse {
     HttpResponse::Ok()
         .content_type(ContentType::plaintext())
         .body(format!("Printed '{}' to stderr", parameters.text))
+}
+
+async fn stdin() -> HttpResponse {
+    let mut reader = BufReader::new(io::stdin());
+    let mut line = String::new();
+
+    match timeout(Duration::from_secs(10), reader.read_line(&mut line)).await {
+        Ok(Ok(_)) => HttpResponse::Ok()
+            .content_type(ContentType::plaintext())
+            .body(line),
+        Ok(Err(e)) => HttpResponse::InternalServerError()
+            .content_type(ContentType::plaintext())
+            .body(format!("Failed to read from stdin: {}", e)),
+        Err(_) => HttpResponse::RequestTimeout()
+            .content_type(ContentType::plaintext())
+            .body("No line could be read from stdin within timeout"),
+    }
 }
 
 struct StopHandle {

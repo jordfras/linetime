@@ -305,12 +305,14 @@ async fn environment_variables_are_forwarded_to_command() {
 }
 
 #[tokio::test]
-async fn stdin_is_ignored_when_command_is_executed() {
+async fn stdin_is_forwarded_to_command() {
     let mut put = Linetime::run(marionette_control::app_path_and_args(vec![]));
     let mut control = marionette_control::Bar::new().await;
 
-    put.write_stdin("ignored line").await;
-    assert_timeout!(put.read_stdout_timestamp());
+    // Writing to stdin of the program should be forwarded to the command
+    put.write_stdin("hello\n").await;
+    // Check that the command got the text on stdin
+    assert_eq!("hello\n", control.stdin().await);
 
     control.exit(0).await;
     assert_command_output_end!(&mut put);

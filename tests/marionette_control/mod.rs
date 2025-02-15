@@ -86,12 +86,19 @@ impl Bar {
         panic!("Marionette HTTP server doesn't seem to be started!");
     }
 
+    /// Tell marionette to write text to stdout
     pub async fn stdout(&self, text: &str) {
         self.post_form("stdout", ("text", text)).await;
     }
 
+    /// Tell marionette to write text to stderr
     pub async fn stderr(&self, text: &str) {
         self.post_form("stderr", ("text", text)).await;
+    }
+
+    /// Tell marionette to read a line from stdin
+    pub async fn stdin(&self) -> String {
+        self.get_text("stdin").await
     }
 
     pub async fn exit(&mut self, exit_code: i32) {
