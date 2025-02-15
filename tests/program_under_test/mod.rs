@@ -5,8 +5,8 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 
-/// A wrapper to run the linetime program with some arguments. It provides functions to expect
-/// output on stdout and stderr.
+/// A wrapper to run the linetime program with some arguments. It provides functions to get output
+/// from stdout and stderr.
 pub struct Linetime {
     process: Child,
     stdin: Option<ChildStdin>,
