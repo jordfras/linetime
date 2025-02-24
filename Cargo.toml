@@ -24,7 +24,7 @@ regex = { version = "1.11.1", default-features = false, features = ["std", "perf
 actix-web = { version = "4.9.0", default-features = false }
 cargo_metadata = "0.19.1"
 reqwest = { version = "0.12.9", default-features = false, features = ["blocking"] }
-serde = { version = "1.0.216", default-features = false, features = ["derive"] }
+serde = { version = "1.0.218", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.134", default-features = false }
 tokio = { version = "1.42.0", default-features = false, features = ["io-std", "io-util", "macros", "process", "rt"] }
 
