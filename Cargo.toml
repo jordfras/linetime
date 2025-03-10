@@ -26,7 +26,7 @@ cargo_metadata = "0.19.2"
 reqwest = { version = "0.12.9", default-features = false, features = ["blocking"] }
 serde = { version = "1.0.218", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.140", default-features = false }
-tokio = { version = "1.42.0", default-features = false, features = ["io-std", "io-util", "macros", "process", "rt"] }
+tokio = { version = "1.44.0", default-features = false, features = ["io-std", "io-util", "macros", "process", "rt"] }
 
 [[test]]
 # Dummy command configured as an integration test binary without harness.
