@@ -25,7 +25,7 @@ actix-web = { version = "4.11.0", default-features = false }
 cargo_metadata = "0.21.0"
 reqwest = { version = "0.12.22", default-features = false, features = ["blocking"] }
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0.140", default-features = false }
+serde_json = { version = "1.0.141", default-features = false }
 tokio = { version = "1.46.1", default-features = false, features = ["io-std", "io-util", "macros", "process", "rt"] }
 
 [[test]]
