@@ -18,7 +18,7 @@ exclude = ["/.github/", "/scripts/"]
 
 [dependencies]
 gumdrop = "0.8.1"
-regex = { version = "1.11.3", default-features = false, features = ["std", "perf"] }
+regex = { version = "1.12.1", default-features = false, features = ["std", "perf"] }
 
 [dev-dependencies]
 actix-web = { version = "4.11.0", default-features = false }
