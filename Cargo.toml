@@ -23,7 +23,7 @@ regex = { version = "1.12.2", default-features = false, features = ["std", "perf
 [dev-dependencies]
 actix-web = { version = "4.12.1", default-features = false }
 cargo_metadata = "0.23.1"
-reqwest = { version = "0.12.28", default-features = false, features = ["blocking"] }
+reqwest = { version = "0.13.1", default-features = false, features = ["blocking"] }
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.149", default-features = false }
 tokio = { version = "1.49.0", default-features = false, features = ["io-std", "io-util", "macros", "process", "rt"] }
